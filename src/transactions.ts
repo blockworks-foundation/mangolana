@@ -296,7 +296,7 @@ export const sendAndConfirmTransactions = async ({
     transactionCallOrchestrator.map((x) => {
       return {
         ...x,
-        sequenceType: typeof x.sequenceType !== 'undefined' ? SequenceType[SequenceType[x.sequenceType]] : 'Parallel',
+        sequenceType: typeof x.sequenceType !== 'undefined' ? SequenceType[Number(x.sequenceType)] : 'Parallel',
       };
     }),
   );
@@ -307,13 +307,13 @@ export const sendAndConfirmTransactions = async ({
         //wait for all Parallel
         await Promise.all(
           fcn.transactionsIdx.map((idx) => {
-            const transactionIdx = Object.keys(idx)[0];
+            const transactionIdx = Number(Object.keys(idx)[0]);
             const transactionInstructionIdx = idx[transactionIdx];
+            //throw
             return sendAndConfirmSignedTransaction({
               connection,
               signedTransaction: signedTxns[transactionIdx],
               signedAtBlock: block!,
-              transactionInstructionIdx: transactionInstructionIdx,
             });
           }),
         );
@@ -321,14 +321,24 @@ export const sendAndConfirmTransactions = async ({
       if (fcn.sequenceType === SequenceType.Sequential) {
         //wait for all Sequential
         for (const idx of fcn.transactionsIdx) {
-          const transactionIdx = Object.keys(idx)[0];
+          const transactionIdx = Number(Object.keys(idx)[0]);
           const transactionInstructionIdx = idx[transactionIdx];
-          await sendAndConfirmSignedTransaction({
-            connection,
-            signedTransaction: signedTxns[transactionIdx],
-            signedAtBlock: block!,
-            transactionInstructionIdx: transactionInstructionIdx,
-          });
+          try {
+            await sendAndConfirmSignedTransaction({
+              connection,
+              signedTransaction: signedTxns[transactionIdx],
+              signedAtBlock: block!,
+            });
+          } catch (e) {
+            if (typeof e === 'object') {
+              throw {
+                ...e,
+                transactionInstructionIdx,
+              };
+            } else {
+              throw e;
+            }
+          }
         }
       }
     }
