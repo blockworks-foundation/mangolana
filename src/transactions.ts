@@ -10,16 +10,9 @@ import {
   TransactionSignature,
 } from '@solana/web3.js';
 import bs58 = require('bs58');
+import { getUnixTs, sleep } from './tools';
 
 const MAXIMUM_NUMBER_OF_BLOCKS_FOR_TRANSACTION = 152;
-
-async function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-export function getUnixTs() {
-  return new Date().getTime() / 1000;
-}
 
 export const awaitTransactionSignatureConfirmation = async ({
   txid,
@@ -144,6 +137,7 @@ export const sendAndConfirmSignedTransaction = async ({
   signedAtBlock,
   connection,
   postSendTxCallback,
+  resendAfterTimeout = false,
 }: {
   signedTransaction: Transaction;
   timeout?: number;
@@ -151,6 +145,7 @@ export const sendAndConfirmSignedTransaction = async ({
   signedAtBlock?: BlockhashWithExpiryBlockHeight;
   connection: Connection;
   postSendTxCallback?: ({ txid }: { txid: string }) => void;
+  resendAfterTimeout?: boolean;
 }) => {
   const rawTransaction = signedTransaction.serialize();
   let txid = bs58.encode(signedTransaction.signatures[0].signature!);
@@ -169,14 +164,17 @@ export const sendAndConfirmSignedTransaction = async ({
   if (!timeout) return txid;
 
   let done = false;
-  (async () => {
-    while (!done && getUnixTs() - startTime < timeout) {
-      await sleep(2000);
-      connection.sendRawTransaction(rawTransaction, {
-        skipPreflight: true,
-      });
-    }
-  })();
+  if (resendAfterTimeout) {
+    (async () => {
+      while (!done && getUnixTs() - startTime < timeout) {
+        await sleep(2000);
+        connection.sendRawTransaction(rawTransaction, {
+          skipPreflight: true,
+        });
+      }
+    })();
+  }
+
   try {
     await awaitTransactionSignatureConfirmation({ txid, timeout, confirmLevel, signedAtBlock, connection });
   } catch (err: any) {
