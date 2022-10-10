@@ -8,37 +8,13 @@ import {
   TransactionInstruction,
 } from '@solana/web3.js';
 import { chunks, getUnixTs } from './tools';
-
-export class TransactionInstructionWithSigners {
-  transactionInstruction: TransactionInstruction;
-  signers: Keypair[];
-  constructor(transactionInstruction: TransactionInstruction, signers: Keypair[] = []) {
-    this.transactionInstruction = transactionInstruction;
-    this.signers = signers;
-  }
-}
-
-class _TransactionInstructionWithIndex extends TransactionInstructionWithSigners {
-  index: number;
-  constructor(transactionInstruction: TransactionInstruction, signers: Keypair[] = [], index: number) {
-    super(transactionInstruction, signers);
-    this.index = index;
-  }
-}
-
-type _SendedTransactionWithTimestamp = {
-  id: string;
-  timestamp: number;
-  index: number;
-  sendedAtBlock: number;
-};
-
-type _SendedTransactionWithIndex = {
-  id: string;
-  index: number;
-};
-
-export type WalletSigner = Pick<SignerWalletAdapter, 'publicKey' | 'signTransaction' | 'signAllTransactions'>;
+import {
+  TransactionInstructionWithSigners,
+  WalletSigner,
+  _SendedTransactionWithIndex,
+  _SendedTransactionWithTimestamp,
+  _TransactionInstructionWithIndex,
+} from './types';
 
 const timeoutSecs = 90;
 const timeoutBlockPeriod = 152;

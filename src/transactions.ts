@@ -12,25 +12,10 @@ import {
   TransactionSignature,
 } from '@solana/web3.js';
 import bs58 = require('bs58');
-import { WalletSigner } from './parallelTransactionProcessor';
 import { getUnixTs, sleep } from './tools';
+import { SequenceType, TransactionInstructionWithType, TransactionsPlayingIndexes, WalletSigner } from './types';
 
 const MAXIMUM_NUMBER_OF_BLOCKS_FOR_TRANSACTION = 152;
-
-interface TransactionInstructionWithType {
-  instructionsSet: TransactionInstruction[];
-  sequenceType?: SequenceType;
-}
-interface TransactionsPlayingIndexes {
-  transactionsIdx: { [txIdx: number]: number }[];
-  sequenceType?: SequenceType;
-}
-
-export enum SequenceType {
-  Sequential,
-  Parallel,
-  StopOnFailure,
-}
 
 export const awaitTransactionSignatureConfirmation = async ({
   txid,
@@ -158,10 +143,10 @@ export const sendAndConfirmSignedTransaction = async ({
   resendAfterTimeout = false,
 }: {
   signedTransaction: Transaction;
+  connection: Connection;
   timeout?: number;
   confirmLevel?: TransactionConfirmationStatus;
   signedAtBlock?: BlockhashWithExpiryBlockHeight;
-  connection: Connection;
   postSendTxCallback?: ({ txid }: { txid: string }) => void;
   resendAfterTimeout?: boolean;
 }) => {
@@ -194,7 +179,7 @@ export const sendAndConfirmSignedTransaction = async ({
   }
 
   try {
-    await awaitTransactionSignatureConfirmation({ txid, timeout, confirmLevel, signedAtBlock, connection });
+    await awaitTransactionSignatureConfirmation({ txid, timeout: timeout, confirmLevel, signedAtBlock, connection });
   } catch (err: any) {
     if (err.timeout) {
       throw { txid };
@@ -233,13 +218,11 @@ export const sendAndConfirmTransactions = async ({
   connection,
   wallet,
   TransactionInstructions,
-  signersSet,
   block,
 }: {
   connection: Connection;
   wallet: WalletSigner;
   TransactionInstructions: TransactionInstructionWithType[];
-  signersSet: Keypair[][];
   block?: BlockhashWithExpiryBlockHeight;
 }) => {
   if (!wallet.publicKey) throw new Error('Wallet not connected!');
@@ -255,17 +238,20 @@ export const sendAndConfirmTransactions = async ({
   const transactionCallOrchestrator: TransactionsPlayingIndexes[] = [];
   for (let i = 0; i < currentTransactions.length; i++) {
     const transactionInstruction = currentTransactions[i];
-    const signers = signersSet[i];
-
+    const signers: Keypair[] = [];
     if (transactionInstruction.instructionsSet.length === 0) {
       continue;
     }
 
     const transaction = new Transaction({ feePayer: wallet.publicKey });
-    transactionInstruction.instructionsSet.forEach((instruction) => transaction.add(instruction));
+    transactionInstruction.instructionsSet.forEach((instruction) => {
+      transaction.add(instruction.transactionInstruction);
+      if (instruction.signers.length) {
+        signers.push(...instruction.signers);
+      }
+    });
     transaction.recentBlockhash = block.blockhash;
-
-    if (signers?.length > 0) {
+    if (signers.length) {
       transaction.partialSign(...signers);
     }
     //we take last index of unsignedTransactions to have right indexes because
@@ -309,12 +295,24 @@ export const sendAndConfirmTransactions = async ({
           fcn.transactionsIdx.map((idx) => {
             const transactionIdx = Number(Object.keys(idx)[0]);
             const transactionInstructionIdx = idx[transactionIdx];
-            //throw
-            return sendAndConfirmSignedTransaction({
-              connection,
-              signedTransaction: signedTxns[transactionIdx],
-              signedAtBlock: block!,
-            });
+            return async () => {
+              try {
+                await sendAndConfirmSignedTransaction({
+                  connection,
+                  signedTransaction: signedTxns[transactionIdx],
+                  signedAtBlock: block!,
+                });
+              } catch (e) {
+                if (typeof e === 'object') {
+                  throw {
+                    ...e,
+                    transactionInstructionIdx,
+                  };
+                } else {
+                  throw e;
+                }
+              }
+            };
           }),
         );
       }
@@ -349,12 +347,10 @@ export const sendAndConfirmTransactions = async ({
         maxTransactionsInBath,
         TransactionInstructions.length,
       );
-      const forwardedSigners = signersSet.slice(maxTransactionsInBath, TransactionInstructions.length);
       await sendAndConfirmTransactions({
         connection,
         wallet,
         TransactionInstructions: forwardedTransactions,
-        signersSet: forwardedSigners,
       });
     }
   } catch (e) {
