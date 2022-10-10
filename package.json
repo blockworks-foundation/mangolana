@@ -30,6 +30,8 @@
   },
   "homepage": "https://github.com/abrzezinski94/Mango-solana-helpers#readme",
   "dependencies": {
+    "@solana/wallet-adapter-base": "^0.9.18",
+    "@solana/wallet-adapter-wallets": "^0.19.1",
     "@solana/web3.js": "^1.63.1",
     "bs58": "^5.0.0"
   },
