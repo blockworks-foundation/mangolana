@@ -1,1 +1,1 @@
-# Mango solana helpers
+# mangolana
