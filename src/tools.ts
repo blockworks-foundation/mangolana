@@ -14,3 +14,5 @@ export function chunks<T>(array: T[], size: number): T[][] {
   }
   return result;
 }
+
+export const MAXIMUM_NUMBER_OF_BLOCKS_FOR_TRANSACTION = 152;

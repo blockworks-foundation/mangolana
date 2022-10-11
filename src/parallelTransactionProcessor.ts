@@ -1,5 +1,5 @@
 import { Connection, RpcResponseAndContext, SignatureStatus, Transaction } from '@solana/web3.js';
-import { chunks, getUnixTs } from './tools';
+import { chunks, getUnixTs, MAXIMUM_NUMBER_OF_BLOCKS_FOR_TRANSACTION } from './tools';
 import {
   TransactionInstructionWithSigners,
   WalletSigner,
@@ -9,7 +9,6 @@ import {
 } from './types';
 
 const timeoutSecs = 90;
-const timeoutBlockPeriod = 152;
 
 const sendTransactionChunk = async (
   transactionInstructions: _TransactionInstructionWithIndex[],
@@ -160,8 +159,14 @@ export const parallelTransactionProcessor = async ({
           const nowTimestamp = getUnixTs();
           if (nowTimestamp - toConfirm[i].timestamp >= timeoutSecs) {
             startBlockCheck = true;
-            console.log(block && block.lastValidBlockHeight, toConfirm[i].sendedAtBlock + timeoutBlockPeriod);
-            if (block && block.lastValidBlockHeight >= toConfirm[i].sendedAtBlock + timeoutBlockPeriod) {
+            console.log(
+              block && block.lastValidBlockHeight,
+              toConfirm[i].sendedAtBlock + MAXIMUM_NUMBER_OF_BLOCKS_FOR_TRANSACTION,
+            );
+            if (
+              block &&
+              block.lastValidBlockHeight >= toConfirm[i].sendedAtBlock + MAXIMUM_NUMBER_OF_BLOCKS_FOR_TRANSACTION
+            ) {
               notConfirmed.push({
                 id: toConfirm[i].id,
                 index: toConfirm[i].index,

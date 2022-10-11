@@ -10,7 +10,7 @@ import {
   TransactionSignature,
 } from '@solana/web3.js';
 import bs58 = require('bs58');
-import { getUnixTs, sleep } from './tools';
+import { getUnixTs, MAXIMUM_NUMBER_OF_BLOCKS_FOR_TRANSACTION, sleep } from './tools';
 import {
   BlockHeightStrategy,
   BlockHeightStrategyClass,
@@ -21,8 +21,6 @@ import {
   TransactionsPlayingIndexes,
   WalletSigner,
 } from './types';
-
-const MAXIMUM_NUMBER_OF_BLOCKS_FOR_TRANSACTION = 152;
 
 /**
  * waits for transaction confirmation
