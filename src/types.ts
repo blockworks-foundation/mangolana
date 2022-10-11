@@ -1,5 +1,5 @@
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
-import { Keypair, TransactionInstruction } from '@solana/web3.js';
+import { BlockhashWithExpiryBlockHeight, Keypair, TransactionInstruction } from '@solana/web3.js';
 
 export class TransactionInstructionWithSigners {
   transactionInstruction: TransactionInstruction;
@@ -46,4 +46,41 @@ export enum SequenceType {
   Sequential,
   Parallel,
   StopOnFailure,
+}
+
+export class TimeStrategy {
+  timeout: number;
+  getSignatureStatusesPoolIntervalMs: number;
+  /**
+   * @param timeout optional (secs) after how much secs not confirmed transaction will be considered timeout, default: 90
+   * @param getSignatureStatusesPoolIntervalMs optional (ms) pool interval of getSignatureStatues, default: 2000
+   */
+  constructor(timeout = 90, getSignatureStatusesPoolIntervalMs = 2000) {
+    this.timeout = timeout;
+    this.getSignatureStatusesPoolIntervalMs = getSignatureStatusesPoolIntervalMs;
+  }
+}
+
+export class BlockHeightStrategy {
+  startBlockCheckAfterSecs: number;
+  block: BlockhashWithExpiryBlockHeight;
+  getSignatureStatusesPoolIntervalMs: number;
+  /**
+   * @param startBlockCheckAfterSecs optional (secs) after that time we will start to pool current blockheight and check if transaction will reach blockchain, default: 90
+   * @param block BlockhashWithExpiryBlockHeight
+   * @param getSignatureStatusesPoolIntervalMs optional (ms) pool interval of getSignatureStatues and blockheight, default: 2000
+   */
+  constructor({
+    startBlockCheckAfterSecs = 90,
+    block,
+    getSignatureStatusesPoolIntervalMs = 2000,
+  }: {
+    block: BlockhashWithExpiryBlockHeight;
+    getSignatureStatusesPoolIntervalMs?: number;
+    startBlockCheckAfterSecs?: number;
+  }) {
+    this.startBlockCheckAfterSecs = startBlockCheckAfterSecs;
+    this.block = block;
+    this.getSignatureStatusesPoolIntervalMs = getSignatureStatusesPoolIntervalMs;
+  }
 }

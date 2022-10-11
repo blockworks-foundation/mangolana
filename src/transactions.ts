@@ -1,5 +1,4 @@
 import {
-  BlockhashWithExpiryBlockHeight,
   Commitment,
   Connection,
   Keypair,
@@ -8,31 +7,42 @@ import {
   SimulatedTransactionResponse,
   Transaction,
   TransactionConfirmationStatus,
-  TransactionInstruction,
   TransactionSignature,
 } from '@solana/web3.js';
 import bs58 = require('bs58');
 import { getUnixTs, sleep } from './tools';
-import { SequenceType, TransactionInstructionWithType, TransactionsPlayingIndexes, WalletSigner } from './types';
+import {
+  BlockHeightStrategy,
+  SequenceType,
+  TimeStrategy,
+  TransactionInstructionWithType,
+  TransactionsPlayingIndexes,
+  WalletSigner,
+} from './types';
 
 const MAXIMUM_NUMBER_OF_BLOCKS_FOR_TRANSACTION = 152;
 
+/**
+ * waits for transaction confirmation
+ * @param timeoutStrategy can be TimeStrategy: pure time based timeout or BlockHeightStrategy: blockheight pool strategy
+ */
 export const awaitTransactionSignatureConfirmation = async ({
   txid,
-  timeout,
   confirmLevel,
   connection,
-  signedAtBlock,
+  timeoutStrategy,
 }: {
   txid: TransactionSignature;
-  timeout: number;
   confirmLevel: TransactionConfirmationStatus;
   connection: Connection;
-  signedAtBlock?: BlockhashWithExpiryBlockHeight;
+  timeoutStrategy: TimeStrategy | BlockHeightStrategy;
 }) => {
-  const timeoutBlockHeight = signedAtBlock
-    ? signedAtBlock.lastValidBlockHeight + MAXIMUM_NUMBER_OF_BLOCKS_FOR_TRANSACTION
-    : 0;
+  const timeoutBlockHeight =
+    timeoutStrategy instanceof BlockHeightStrategy
+      ? timeoutStrategy.block.lastValidBlockHeight + MAXIMUM_NUMBER_OF_BLOCKS_FOR_TRANSACTION
+      : 0;
+  const timeout =
+    timeoutStrategy instanceof BlockHeightStrategy ? timeoutStrategy.startBlockCheckAfterSecs : timeoutStrategy.timeout;
   let startTimeoutCheck = false;
   let done = false;
   const confirmLevels: (TransactionConfirmationStatus | null | undefined)[] = ['finalized'];
@@ -77,7 +87,7 @@ export const awaitTransactionSignatureConfirmation = async ({
         done = true;
         console.log('WS error in setup', txid, e);
       }
-      let retrySleep = 2000;
+      let retrySleep = timeoutStrategy.getSignatureStatusesPoolIntervalMs!;
       while (!done) {
         // eslint-disable-next-line no-loop-func
         await sleep(retrySleep);
@@ -133,23 +143,25 @@ export const awaitTransactionSignatureConfirmation = async ({
   return result;
 };
 
+/**
+ * send and waits for transaction to confirm
+ * @param postSendTxCallback call back that will fire after sending tx before waiting for tx to be confirmed.
+ */
 export const sendAndConfirmSignedTransaction = async ({
   signedTransaction,
-  timeout = 90,
   confirmLevel = 'processed',
-  signedAtBlock,
   connection,
   postSendTxCallback,
-  resendAfterTimeout = false,
+  timeoutStrategy,
 }: {
   signedTransaction: Transaction;
   connection: Connection;
-  timeout?: number;
   confirmLevel?: TransactionConfirmationStatus;
-  signedAtBlock?: BlockhashWithExpiryBlockHeight;
   postSendTxCallback?: ({ txid }: { txid: string }) => void;
-  resendAfterTimeout?: boolean;
+  timeoutStrategy: TimeStrategy | BlockHeightStrategy;
 }) => {
+  const resendTimeout =
+    timeoutStrategy instanceof TimeStrategy ? timeoutStrategy.timeout : timeoutStrategy.startBlockCheckAfterSecs;
   const rawTransaction = signedTransaction.serialize();
   let txid = bs58.encode(signedTransaction.signatures[0].signature!);
   const startTime = getUnixTs();
@@ -164,22 +176,24 @@ export const sendAndConfirmSignedTransaction = async ({
       console.log(`postSendTxCallback error ${e}`);
     }
   }
-  if (!timeout) return txid;
 
   let done = false;
-  if (resendAfterTimeout) {
-    (async () => {
-      while (!done && getUnixTs() - startTime < timeout) {
-        await sleep(2000);
-        connection.sendRawTransaction(rawTransaction, {
-          skipPreflight: true,
-        });
-      }
-    })();
-  }
+  (async () => {
+    while (!done && getUnixTs() - startTime < resendTimeout!) {
+      await sleep(2000);
+      connection.sendRawTransaction(rawTransaction, {
+        skipPreflight: true,
+      });
+    }
+  })();
 
   try {
-    await awaitTransactionSignatureConfirmation({ txid, timeout: timeout, confirmLevel, signedAtBlock, connection });
+    await awaitTransactionSignatureConfirmation({
+      txid,
+      timeoutStrategy: timeoutStrategy,
+      confirmLevel,
+      connection,
+    });
   } catch (err: any) {
     if (err.timeout) {
       throw { txid };
@@ -214,22 +228,22 @@ export const sendAndConfirmSignedTransaction = async ({
   return txid;
 };
 
-export const sendAndConfirmTransactions = async ({
+/**
+ * sign and send array of transactions in desired batches with different styles of send for each array
+ */
+export const sendSignAndConfirmTransactions = async ({
   connection,
   wallet,
   TransactionInstructions,
-  block,
+  timeoutStrategy,
 }: {
   connection: Connection;
   wallet: WalletSigner;
   TransactionInstructions: TransactionInstructionWithType[];
-  block?: BlockhashWithExpiryBlockHeight;
+  timeoutStrategy: BlockHeightStrategy;
 }) => {
   if (!wallet.publicKey) throw new Error('Wallet not connected!');
   //block will be used for timeout calculation
-  if (!block) {
-    block = await connection.getLatestBlockhash('confirmed');
-  }
   //max usable transactions per one sign is 40
   const maxTransactionsInBath = 40;
   const currentTransactions = TransactionInstructions.slice(0, maxTransactionsInBath);
@@ -250,7 +264,7 @@ export const sendAndConfirmTransactions = async ({
         signers.push(...instruction.signers);
       }
     });
-    transaction.recentBlockhash = block.blockhash;
+    transaction.recentBlockhash = timeoutStrategy.block.blockhash;
     if (signers.length) {
       transaction.partialSign(...signers);
     }
@@ -300,7 +314,7 @@ export const sendAndConfirmTransactions = async ({
                 await sendAndConfirmSignedTransaction({
                   connection,
                   signedTransaction: signedTxns[transactionIdx],
-                  signedAtBlock: block!,
+                  timeoutStrategy: timeoutStrategy,
                 });
               } catch (e) {
                 if (typeof e === 'object') {
@@ -325,7 +339,7 @@ export const sendAndConfirmTransactions = async ({
             await sendAndConfirmSignedTransaction({
               connection,
               signedTransaction: signedTxns[transactionIdx],
-              signedAtBlock: block!,
+              timeoutStrategy: timeoutStrategy,
             });
           } catch (e) {
             if (typeof e === 'object') {
@@ -347,10 +361,11 @@ export const sendAndConfirmTransactions = async ({
         maxTransactionsInBath,
         TransactionInstructions.length,
       );
-      await sendAndConfirmTransactions({
+      await sendSignAndConfirmTransactions({
         connection,
         wallet,
         TransactionInstructions: forwardedTransactions,
+        timeoutStrategy: timeoutStrategy,
       });
     }
   } catch (e) {

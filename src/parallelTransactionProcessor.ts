@@ -1,12 +1,4 @@
-import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
-import {
-  Connection,
-  Keypair,
-  RpcResponseAndContext,
-  SignatureStatus,
-  Transaction,
-  TransactionInstruction,
-} from '@solana/web3.js';
+import { Connection, RpcResponseAndContext, SignatureStatus, Transaction } from '@solana/web3.js';
 import { chunks, getUnixTs } from './tools';
 import {
   TransactionInstructionWithSigners,
@@ -72,6 +64,9 @@ const sendInstructions = async (
   return toConfirm;
 };
 
+/**
+ * sign, send and wait for confirmation of parallel transactions, best for in code keypair wallet
+ */
 export const parallelTransactionProcessor = async ({
   transactionInstructionsWithSigners,
   connection,
