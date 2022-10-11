@@ -13,8 +13,10 @@ import bs58 = require('bs58');
 import { getUnixTs, sleep } from './tools';
 import {
   BlockHeightStrategy,
+  BlockHeightStrategyClass,
   SequenceType,
   TimeStrategy,
+  TimeStrategyClass,
   TransactionInstructionWithType,
   TransactionsPlayingIndexes,
   WalletSigner,
@@ -24,7 +26,22 @@ const MAXIMUM_NUMBER_OF_BLOCKS_FOR_TRANSACTION = 152;
 
 /**
  * waits for transaction confirmation
- * @param timeoutStrategy can be TimeStrategy: pure time based timeout or BlockHeightStrategy: blockheight pool strategy
+ * @param timeoutStrategy
+ *
+ *
+ * TimeStrategy: pure timeout strategy
+ * {
+ *  timeout: optional, (secs) after how much secs not confirmed transaction will be considered timeout, default: 90
+ *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues, default: 2000
+ * }
+ *
+ *
+ * BlockHeightStrategy: blockheight pool satrategy
+ * {
+ *  startBlockCheckAfterSecs: optional, (secs) after that time we will start to pool current blockheight and check if transaction will reach blockchain, default: 90
+ *  block: BlockhashWithExpiryBlockHeight
+ *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues and blockheight, default: 2000
+ * }
  */
 export const awaitTransactionSignatureConfirmation = async ({
   txid,
@@ -37,12 +54,17 @@ export const awaitTransactionSignatureConfirmation = async ({
   connection: Connection;
   timeoutStrategy: TimeStrategy | BlockHeightStrategy;
 }) => {
-  const timeoutBlockHeight =
-    timeoutStrategy instanceof BlockHeightStrategy
-      ? timeoutStrategy.block.lastValidBlockHeight + MAXIMUM_NUMBER_OF_BLOCKS_FOR_TRANSACTION
-      : 0;
-  const timeout =
-    timeoutStrategy instanceof BlockHeightStrategy ? timeoutStrategy.startBlockCheckAfterSecs : timeoutStrategy.timeout;
+  const isBlockHeightStrategy = typeof (timeoutStrategy as BlockHeightStrategy).block !== 'undefined';
+  const timeoutConfig = !isBlockHeightStrategy
+    ? new TimeStrategyClass({ ...(timeoutStrategy as TimeStrategy) })
+    : new BlockHeightStrategyClass({ ...(timeoutStrategy as BlockHeightStrategy) });
+  const timeoutBlockHeight = isBlockHeightStrategy
+    ? (timeoutConfig as BlockHeightStrategy).block.lastValidBlockHeight + MAXIMUM_NUMBER_OF_BLOCKS_FOR_TRANSACTION
+    : 0;
+  const timeout = isBlockHeightStrategy
+    ? (timeoutConfig as BlockHeightStrategy).startBlockCheckAfterSecs
+    : (timeoutConfig as TimeStrategy).timeout;
+
   let startTimeoutCheck = false;
   let done = false;
   const confirmLevels: (TransactionConfirmationStatus | null | undefined)[] = ['finalized'];
@@ -146,6 +168,22 @@ export const awaitTransactionSignatureConfirmation = async ({
 /**
  * send and waits for transaction to confirm
  * @param postSendTxCallback call back that will fire after sending tx before waiting for tx to be confirmed.
+ * @param timeoutStrategy
+ *
+ *
+ * TimeStrategy: pure timeout strategy
+ * {
+ *  timeout: optional, (secs) after how much secs not confirmed transaction will be considered timeout, default: 90
+ *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues, default: 2000
+ * }
+ *
+ *
+ * BlockHeightStrategy: blockheight pool satrategy
+ * {
+ *  startBlockCheckAfterSecs: optional, (secs) after that time we will start to pool current blockheight and check if transaction will reach blockchain, default: 90
+ *  block: BlockhashWithExpiryBlockHeight
+ *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues and blockheight, default: 2000
+ * }
  */
 export const sendAndConfirmSignedTransaction = async ({
   signedTransaction,
@@ -160,8 +198,14 @@ export const sendAndConfirmSignedTransaction = async ({
   postSendTxCallback?: ({ txid }: { txid: string }) => void;
   timeoutStrategy: TimeStrategy | BlockHeightStrategy;
 }) => {
-  const resendTimeout =
-    timeoutStrategy instanceof TimeStrategy ? timeoutStrategy.timeout : timeoutStrategy.startBlockCheckAfterSecs;
+  const isBlockHeightStrategy = typeof (timeoutStrategy as BlockHeightStrategy).block !== 'undefined';
+  const timeoutConfig = !isBlockHeightStrategy
+    ? new TimeStrategyClass({ ...(timeoutStrategy as TimeStrategy) })
+    : new BlockHeightStrategyClass({ ...(timeoutStrategy as BlockHeightStrategy) });
+  const resendTimeout = !isBlockHeightStrategy
+    ? (timeoutConfig as TimeStrategy).timeout
+    : (timeoutConfig as BlockHeightStrategy).startBlockCheckAfterSecs;
+
   const rawTransaction = signedTransaction.serialize();
   let txid = bs58.encode(signedTransaction.signatures[0].signature!);
   const startTime = getUnixTs();
@@ -230,6 +274,14 @@ export const sendAndConfirmSignedTransaction = async ({
 
 /**
  * sign and send array of transactions in desired batches with different styles of send for each array
+ * @param timeoutStrategy
+ *
+ * BlockHeightStrategy: blockheight pool satrategy
+ * {
+ *  startBlockCheckAfterSecs: optional, (secs) after that time we will start to pool current blockheight and check if transaction will reach blockchain, default: 90
+ *  block: BlockhashWithExpiryBlockHeight
+ *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues and blockheight, default: 2000
+ * }
  */
 export const sendSignAndConfirmTransactions = async ({
   connection,

@@ -48,28 +48,43 @@ export enum SequenceType {
   StopOnFailure,
 }
 
-export class TimeStrategy {
+/**
+ * @param timeout optional (secs) after how much secs not confirmed transaction will be considered timeout, default: 90
+ * @param getSignatureStatusesPoolIntervalMs optional (ms) pool interval of getSignatureStatues, default: 2000
+ */
+export type TimeStrategy = {
+  timeout: number;
+  getSignatureStatusesPoolIntervalMs?: number;
+};
+
+/**
+ * @param startBlockCheckAfterSecs optional (secs) after that time we will start to pool current blockheight and check if transaction will reach blockchain, default: 90
+ * @param block BlockhashWithExpiryBlockHeight
+ * @param getSignatureStatusesPoolIntervalMs optional (ms) pool interval of getSignatureStatues and blockheight, default: 2000
+ */
+export type BlockHeightStrategy = {
+  startBlockCheckAfterSecs?: number;
+  block: BlockhashWithExpiryBlockHeight;
+  getSignatureStatusesPoolIntervalMs?: number;
+};
+export class TimeStrategyClass implements TimeStrategy {
   timeout: number;
   getSignatureStatusesPoolIntervalMs: number;
-  /**
-   * @param timeout optional (secs) after how much secs not confirmed transaction will be considered timeout, default: 90
-   * @param getSignatureStatusesPoolIntervalMs optional (ms) pool interval of getSignatureStatues, default: 2000
-   */
-  constructor(timeout = 90, getSignatureStatusesPoolIntervalMs = 2000) {
+  constructor({
+    timeout = 90,
+    getSignatureStatusesPoolIntervalMs = 2000,
+  }: {
+    timeout: number;
+    getSignatureStatusesPoolIntervalMs?: number;
+  }) {
     this.timeout = timeout;
     this.getSignatureStatusesPoolIntervalMs = getSignatureStatusesPoolIntervalMs;
   }
 }
-
-export class BlockHeightStrategy {
+export class BlockHeightStrategyClass implements BlockHeightStrategy {
   startBlockCheckAfterSecs: number;
   block: BlockhashWithExpiryBlockHeight;
   getSignatureStatusesPoolIntervalMs: number;
-  /**
-   * @param startBlockCheckAfterSecs optional (secs) after that time we will start to pool current blockheight and check if transaction will reach blockchain, default: 90
-   * @param block BlockhashWithExpiryBlockHeight
-   * @param getSignatureStatusesPoolIntervalMs optional (ms) pool interval of getSignatureStatues and blockheight, default: 2000
-   */
   constructor({
     startBlockCheckAfterSecs = 90,
     block,
