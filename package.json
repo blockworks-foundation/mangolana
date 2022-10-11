@@ -1,5 +1,5 @@
 {
-  "name": "mango-solana-helpers",
+  "name": "mangolana",
   "version": "1.0.0",
   "description": "",
   "main": "lib/index.js",
@@ -17,7 +17,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/abrzezinski94/Mango-solana-helpers.git"
+    "url": "git+https://github.com/blockworks-foundation/mangolana.git"
   },
   "files": [
     "lib/**/*"
@@ -26,12 +26,11 @@
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/abrzezinski94/Mango-solana-helpers/issues"
+    "url": "https://github.com/blockworks-foundation/mangolana/issues"
   },
-  "homepage": "https://github.com/abrzezinski94/Mango-solana-helpers#readme",
+  "homepage": "https://github.com/blockworks-foundation/mangolana#readme",
   "dependencies": {
     "@solana/wallet-adapter-base": "^0.9.18",
-    "@solana/wallet-adapter-wallets": "^0.19.1",
     "@solana/web3.js": "^1.63.1",
     "bs58": "^5.0.0"
   },
