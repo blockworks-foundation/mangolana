@@ -32,7 +32,8 @@
   "dependencies": {
     "@solana/wallet-adapter-base": "^0.9.18",
     "@solana/web3.js": "^1.63.1",
-    "bs58": "^5.0.0"
+    "bs58": "^5.0.0",
+    "node-fetch": "^3.2.10"
   },
   "devDependencies": {
     "prettier": "^2.7.1",
