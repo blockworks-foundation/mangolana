@@ -30,7 +30,7 @@ export type _SendedTransactionWithIndex = {
   index: number;
 };
 
-export type WalletSigner = Pick<SignerWalletAdapter, 'publicKey' | 'signTransaction' | 'signAllTransactions'>;
+export type WalletSigner = Pick<any, 'publicKey' | 'signTransaction' | 'signAllTransactions'>;
 
 export interface TransactionInstructionWithType {
   instructionsSet: TransactionInstructionWithSigners[];
