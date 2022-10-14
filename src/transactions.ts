@@ -196,6 +196,7 @@ export const sendAndConfirmSignedTransaction = async ({
   postSendTxCallback?: ({ txid }: { txid: string }) => void;
   timeoutStrategy: TimeStrategy | BlockHeightStrategy;
 }) => {
+  console.log('34534534');
   const isBlockHeightStrategy = typeof (timeoutStrategy as BlockHeightStrategy).block !== 'undefined';
   const timeoutConfig = !isBlockHeightStrategy
     ? new TimeStrategyClass({ ...(timeoutStrategy as TimeStrategy) })
@@ -359,24 +360,26 @@ export const sendSignAndConfirmTransactions = async ({
           fcn.transactionsIdx.map((idx) => {
             const transactionIdx = Number(Object.keys(idx)[0]);
             const transactionInstructionIdx = idx[transactionIdx];
-            return async () => {
+            return new Promise(async (resolve, reject) => {
               try {
-                await sendAndConfirmSignedTransaction({
+                const resp = await sendAndConfirmSignedTransaction({
                   connection,
                   signedTransaction: signedTxns[transactionIdx],
                   timeoutStrategy: timeoutStrategy,
                 });
+                resolve(resp);
               } catch (e) {
+                console.log(e);
                 if (typeof e === 'object') {
-                  throw {
+                  reject({
                     ...e,
                     transactionInstructionIdx,
-                  };
+                  });
                 } else {
-                  throw e;
+                  reject(e);
                 }
               }
-            };
+            });
           }),
         );
       }
@@ -392,6 +395,7 @@ export const sendSignAndConfirmTransactions = async ({
               timeoutStrategy: timeoutStrategy,
             });
           } catch (e) {
+            console.log(e);
             if (typeof e === 'object') {
               throw {
                 ...e,
