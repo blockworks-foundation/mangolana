@@ -189,12 +189,16 @@ export const sendAndConfirmSignedTransaction = async ({
   connection,
   postSendTxCallback,
   timeoutStrategy,
+  resendTxUntilConfirmed = false,
+  runAfterTxConfirmation,
 }: {
   signedTransaction: Transaction;
   connection: Connection;
   confirmLevel?: TransactionConfirmationStatus;
-  postSendTxCallback?: ({ txid }: { txid: string }) => void;
   timeoutStrategy: TimeStrategy | BlockHeightStrategy;
+  resendTxUntilConfirmed?: boolean;
+  postSendTxCallback?: ({ txid }: { txid: string }) => void;
+  runAfterTxConfirmation?: () => void;
 }) => {
   const isBlockHeightStrategy = typeof (timeoutStrategy as BlockHeightStrategy).block !== 'undefined';
   const timeoutConfig = !isBlockHeightStrategy
@@ -220,14 +224,16 @@ export const sendAndConfirmSignedTransaction = async ({
   }
 
   let done = false;
-  (async () => {
-    while (!done && getUnixTs() - startTime < resendTimeout!) {
-      await sleep(2000);
-      connection.sendRawTransaction(rawTransaction, {
-        skipPreflight: true,
-      });
-    }
-  })();
+  if (resendTxUntilConfirmed) {
+    (async () => {
+      while (!done && getUnixTs() - startTime < resendTimeout!) {
+        await sleep(2000);
+        connection.sendRawTransaction(rawTransaction, {
+          skipPreflight: true,
+        });
+      }
+    })();
+  }
 
   try {
     await awaitTransactionSignatureConfirmation({
@@ -236,6 +242,9 @@ export const sendAndConfirmSignedTransaction = async ({
       confirmLevel,
       connection,
     });
+    if (runAfterTxConfirmation) {
+      runAfterTxConfirmation();
+    }
   } catch (err: any) {
     if (err.timeout) {
       throw { txid };
@@ -305,14 +314,16 @@ export const sendSignAndConfirmTransactions = async ({
   transactionInstructions: TransactionInstructionWithType[];
   timeoutStrategy?: BlockHeightStrategy;
   callbacks?: {
-    runAfterFirstBatchSign?: (() => void) | null;
-    runAfterBatchSign?: (() => void) | null;
-    runAfterAllTxConfirmed?: (() => void) | null;
+    runAfterFirstBatchSign?: (signedTxnsCount: number) => void;
+    runAfterBatchSign?: (signedTxnsCount: number) => void;
+    runAfterAllTxConfirmed?: () => void;
+    runAfterEveryTxConfirmation?: () => void;
+    runOnError?: (e: any, notProcessedTransactions: TransactionInstructionWithType[]) => void;
   };
   config?: {
     maxTxesInBatch: number;
     autoRetry: boolean;
-    maxRetries: number;
+    maxRetries?: number;
     retried?: number;
   };
 }) => {
@@ -323,6 +334,9 @@ export const sendSignAndConfirmTransactions = async ({
   }
   if (typeof config.retried === 'undefined') {
     config.retried = 0;
+  }
+  if (typeof config.maxRetries === 'undefined') {
+    config.maxRetries = 5;
   }
   //block will be used for timeout calculation
   //max usable transactions per one sign is 40
@@ -373,9 +387,9 @@ export const sendSignAndConfirmTransactions = async ({
   console.log(transactionCallOrchestrator);
   const signedTxns = await wallet.signAllTransactions(unsignedTxns);
   if (callbacks?.runAfterFirstBatchSign) {
-    callbacks.runAfterFirstBatchSign();
+    callbacks.runAfterFirstBatchSign(signedTxns.length);
   } else if (callbacks?.runAfterBatchSign) {
-    callbacks.runAfterBatchSign();
+    callbacks.runAfterBatchSign(signedTxns.length);
   }
   console.log(
     'Transactions play type order',
@@ -403,6 +417,7 @@ export const sendSignAndConfirmTransactions = async ({
                   timeoutStrategy: {
                     block: block!,
                   },
+                  runAfterTxConfirmation: callbacks?.runAfterEveryTxConfirmation,
                 });
                 resolve(resp);
               } catch (e) {
@@ -432,6 +447,7 @@ export const sendSignAndConfirmTransactions = async ({
               timeoutStrategy: {
                 block,
               },
+              runAfterTxConfirmation: callbacks?.runAfterEveryTxConfirmation,
             });
           } catch (e) {
             console.log(e);
@@ -461,6 +477,9 @@ export const sendSignAndConfirmTransactions = async ({
         timeoutStrategy: timeoutStrategy,
         callbacks: {
           runAfterBatchSign: callbacks?.runAfterBatchSign,
+          runAfterAllTxConfirmed: callbacks?.runAfterAllTxConfirmed,
+          runAfterEveryTxConfirmation: callbacks?.runAfterEveryTxConfirmation,
+          runOnError: callbacks?.runOnError,
         },
       });
     }
@@ -469,6 +488,15 @@ export const sendSignAndConfirmTransactions = async ({
     }
   } catch (e) {
     console.log(e);
+    if (callbacks?.runOnError) {
+      if (typeof e === 'object') {
+        const idx = (e as any).txInstructionIdx;
+        const txInstructionForRetry = transactionInstructions.slice(idx, transactionInstructions.length);
+        callbacks.runOnError(e, txInstructionForRetry);
+      } else {
+        callbacks.runOnError(e, []);
+      }
+    }
     if (config.autoRetry && config.maxRetries < config.retried) {
       const idx = (e as any)?.txInstructionIdx;
       if (typeof idx !== 'undefined') {
