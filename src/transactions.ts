@@ -42,17 +42,17 @@ export type awaitTransactionSignatureConfirmationProps = {
  * @param timeoutStrategy TimeStrategy | BlockHeightStrategy
  *
  * TimeStrategy: pure timeout strategy
- * {
+ *
  *  timeout: optional, (secs) after how much secs not confirmed transaction will be considered timeout, default: 90
  *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues, default: 2000
- * }
+ *
  *
  * BlockHeightStrategy: blockheight pool satrategy
- * {
+ *
  *  startBlockCheckAfterSecs: optional, (secs) after that time we will start to pool current blockheight and check if transaction will reach blockchain, default: 90
  *  block: BlockhashWithExpiryBlockHeight
  *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues and blockheight, default: 2000
- * }
+ *
  */
 export const awaitTransactionSignatureConfirmation = async ({
   txid,
@@ -194,17 +194,17 @@ export type sendAndConfirmSignedTransactionProps = {
  * @param timeoutStrategy TimeStrategy | BlockHeightStrategy
  *
  * TimeStrategy: pure timeout strategy
- * {
+ *
  *  timeout: optional, (secs) after how much secs not confirmed transaction will be considered timeout, default: 90
  *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues, default: 2000
- * }
+ *
  *
  * BlockHeightStrategy: blockheight pool satrategy
- * {
+ *
  *  startBlockCheckAfterSecs: optional, (secs) after that time we will start to pool current blockheight and check if transaction will reach blockchain, default: 90
  *  block: BlockhashWithExpiryBlockHeight
  *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues and blockheight, default: 2000
- * }
+ *
  * @param config.resendTxUntilConfirmed force resend transaction in the mean time of waiting for confirmation, default false
  * @param config.resendPoolTimeMs when resendTxUntilConfirmed is true it will resend transaction every value of ms until there is timeout, default 2000
  */
@@ -323,11 +323,11 @@ export type sendSignAndConfirmTransactionsProps = {
  * @param timeoutStrategy
  *
  * BlockHeightStrategy: blockheight pool satrategy
- * {
+ *
  *  startBlockCheckAfterSecs: optional, (secs) after that time we will start to pool current blockheight and check if transaction will reach blockchain, default: 90
  *  block: BlockhashWithExpiryBlockHeight
  *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues and blockheight, default: 2000
- * }
+ *
  *
  * @param callbacks sets of callbacks
  * @param callbacks.afterFirstBatchSign callback will run only on first batch approval
