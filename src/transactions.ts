@@ -280,23 +280,54 @@ export const sendAndConfirmSignedTransaction = async ({
  *  block: BlockhashWithExpiryBlockHeight
  *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues and blockheight, default: 2000
  * }
+ *
+ * @param callbacks
+ *
+ * runAfterFirstBatchSign callback will run only on first batch approval
+ * runAfterBatchSign callback will run on any batch approval if used no need to add runAfterFirstBatchSign
+ * runAfterAllTxConfirmed will run after all batches processing is completed
  */
 export const sendSignAndConfirmTransactions = async ({
   connection,
   wallet,
-  TransactionInstructions,
+  transactionInstructions,
   timeoutStrategy,
+  callbacks,
+  config = {
+    maxTxesInBatch: 40,
+    autoRetry: false,
+    maxRetries: 5,
+    retried: 0,
+  },
 }: {
   connection: Connection;
   wallet: WalletSigner;
-  TransactionInstructions: TransactionInstructionWithType[];
-  timeoutStrategy: BlockHeightStrategy;
+  transactionInstructions: TransactionInstructionWithType[];
+  timeoutStrategy?: BlockHeightStrategy;
+  callbacks?: {
+    runAfterFirstBatchSign?: (() => void) | null;
+    runAfterBatchSign?: (() => void) | null;
+    runAfterAllTxConfirmed?: (() => void) | null;
+  };
+  config?: {
+    maxTxesInBatch: number;
+    autoRetry: boolean;
+    maxRetries: number;
+    retried?: number;
+  };
 }) => {
+  let block = timeoutStrategy?.block;
   if (!wallet.publicKey) throw new Error('Wallet not connected!');
+  if (!block) {
+    block = await connection.getLatestBlockhash('confirmed');
+  }
+  if (typeof config.retried === 'undefined') {
+    config.retried = 0;
+  }
   //block will be used for timeout calculation
   //max usable transactions per one sign is 40
-  const maxTransactionsInBath = 40;
-  const currentTransactions = TransactionInstructions.slice(0, maxTransactionsInBath);
+  const maxTransactionsInBath = config.maxTxesInBatch;
+  const currentTransactions = transactionInstructions.slice(0, maxTransactionsInBath);
   const unsignedTxns: Transaction[] = [];
   //this object will determine how we run transactions e.g [ParallelTx, SequenceTx, ParallelTx]
   const transactionCallOrchestrator: TransactionsPlayingIndexes[] = [];
@@ -314,7 +345,7 @@ export const sendSignAndConfirmTransactions = async ({
         signers.push(...instruction.signers);
       }
     });
-    transaction.recentBlockhash = timeoutStrategy.block.blockhash;
+    transaction.recentBlockhash = block.blockhash;
     if (signers.length) {
       transaction.partialSign(...signers);
     }
@@ -341,6 +372,11 @@ export const sendSignAndConfirmTransactions = async ({
   }
   console.log(transactionCallOrchestrator);
   const signedTxns = await wallet.signAllTransactions(unsignedTxns);
+  if (callbacks?.runAfterFirstBatchSign) {
+    callbacks.runAfterFirstBatchSign();
+  } else if (callbacks?.runAfterBatchSign) {
+    callbacks.runAfterBatchSign();
+  }
   console.log(
     'Transactions play type order',
     transactionCallOrchestrator.map((x) => {
@@ -364,7 +400,9 @@ export const sendSignAndConfirmTransactions = async ({
                 const resp = await sendAndConfirmSignedTransaction({
                   connection,
                   signedTransaction: signedTxns[transactionIdx],
-                  timeoutStrategy: timeoutStrategy,
+                  timeoutStrategy: {
+                    block: block!,
+                  },
                 });
                 resolve(resp);
               } catch (e) {
@@ -391,7 +429,9 @@ export const sendSignAndConfirmTransactions = async ({
             await sendAndConfirmSignedTransaction({
               connection,
               signedTransaction: signedTxns[transactionIdx],
-              timeoutStrategy: timeoutStrategy,
+              timeoutStrategy: {
+                block,
+              },
             });
           } catch (e) {
             console.log(e);
@@ -409,21 +449,44 @@ export const sendSignAndConfirmTransactions = async ({
     }
     //we call recursively our function to forward rest of transactions if
     // number of them is higher then maxTransactionsInBath
-    if (TransactionInstructions.length > maxTransactionsInBath) {
-      const forwardedTransactions = TransactionInstructions.slice(
+    if (transactionInstructions.length > maxTransactionsInBath) {
+      const forwardedTransactions = transactionInstructions.slice(
         maxTransactionsInBath,
-        TransactionInstructions.length,
+        transactionInstructions.length,
       );
       await sendSignAndConfirmTransactions({
         connection,
         wallet,
-        TransactionInstructions: forwardedTransactions,
+        transactionInstructions: forwardedTransactions,
         timeoutStrategy: timeoutStrategy,
+        callbacks: {
+          runAfterBatchSign: callbacks?.runAfterBatchSign,
+        },
       });
+    }
+    if (callbacks?.runAfterAllTxConfirmed) {
+      callbacks.runAfterAllTxConfirmed();
     }
   } catch (e) {
     console.log(e);
-    throw e;
+    if (config.autoRetry && config.maxRetries < config.retried) {
+      const idx = (e as any)?.txInstructionIdx;
+      if (typeof idx !== 'undefined') {
+        config.retried++;
+        const txInstructionForRetry = transactionInstructions.slice(idx, transactionInstructions.length);
+        await sendSignAndConfirmTransactions({
+          connection,
+          wallet,
+          transactionInstructions: txInstructionForRetry,
+          callbacks,
+          config,
+        });
+      } else {
+        throw e;
+      }
+    } else {
+      throw e;
+    }
   }
 };
 
