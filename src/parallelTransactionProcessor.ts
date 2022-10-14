@@ -1,12 +1,33 @@
-import { Connection, RpcResponseAndContext, SignatureStatus, Transaction } from '@solana/web3.js';
-import { chunks, getUnixTs, MAXIMUM_NUMBER_OF_BLOCKS_FOR_TRANSACTION } from './tools';
 import {
-  TransactionInstructionWithSigners,
-  WalletSigner,
-  _SendedTransactionWithIndex,
-  _SendedTransactionWithTimestamp,
-  _TransactionInstructionWithIndex,
-} from './types';
+  Connection,
+  Keypair,
+  RpcResponseAndContext,
+  SignatureStatus,
+  Transaction,
+  TransactionInstruction,
+} from '@solana/web3.js';
+import { chunks, getUnixTs, MAXIMUM_NUMBER_OF_BLOCKS_FOR_TRANSACTION } from './tools';
+import { TransactionInstructionWithSigners, WalletSigner } from './globalTypes';
+
+export class _TransactionInstructionWithIndex extends TransactionInstructionWithSigners {
+  index: number;
+  constructor(transactionInstruction: TransactionInstruction, signers: Keypair[] = [], index: number) {
+    super(transactionInstruction, signers);
+    this.index = index;
+  }
+}
+
+export type _SendedTransactionWithTimestamp = {
+  id: string;
+  timestamp: number;
+  index: number;
+  sendedAtBlock: number;
+};
+
+export type _SendedTransactionWithIndex = {
+  id: string;
+  index: number;
+};
 
 const timeoutSecs = 90;
 

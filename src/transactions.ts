@@ -17,22 +17,29 @@ import {
   SequenceType,
   TimeStrategy,
   TimeStrategyClass,
-  TransactionInstructionWithType,
-  TransactionsPlayingIndexes,
+  TransactionInstructionWithSigners,
   WalletSigner,
-} from './types';
+} from './globalTypes';
+
+export interface TransactionInstructionWithType {
+  instructionsSet: TransactionInstructionWithSigners[];
+  sequenceType?: SequenceType;
+}
+
+export interface TransactionsPlayingIndexes {
+  transactionsIdx: { [txIdx: number]: number }[];
+  sequenceType?: SequenceType;
+}
 
 /**
  * waits for transaction confirmation
- * @param timeoutStrategy
- *
+ * @param timeoutStrategy TimeStrategy | BlockHeightStrategy
  *
  * TimeStrategy: pure timeout strategy
  * {
  *  timeout: optional, (secs) after how much secs not confirmed transaction will be considered timeout, default: 90
  *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues, default: 2000
  * }
- *
  *
  * BlockHeightStrategy: blockheight pool satrategy
  * {
@@ -163,11 +170,27 @@ export const awaitTransactionSignatureConfirmation = async ({
   return result;
 };
 
+export type sendAndConfirmSignedTransactionProps = {
+  signedTransaction: Transaction;
+  connection: Connection;
+  confirmLevel?: TransactionConfirmationStatus;
+  timeoutStrategy: TimeStrategy | BlockHeightStrategy;
+  callbacks?: {
+    postSendTxCallback?: ({ txid }: { txid: string }) => void;
+    afterTxConfirmation?: () => void;
+  };
+  config?: {
+    resendTxUntilConfirmed?: boolean;
+    resendPoolTimeMs?: number;
+  };
+};
+
 /**
  * send and waits for transaction to confirm
- * @param postSendTxCallback call back that will fire after sending tx before waiting for tx to be confirmed.
- * @param timeoutStrategy
- *
+ * @param callbacks sets of callbacks.
+ * @param callbacks.postSendTxCallback post send transaction callback
+ * @param callbacks.afterTxConfirmation runs after tx confirmation
+ * @param timeoutStrategy TimeStrategy | BlockHeightStrategy
  *
  * TimeStrategy: pure timeout strategy
  * {
@@ -175,31 +198,23 @@ export const awaitTransactionSignatureConfirmation = async ({
  *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues, default: 2000
  * }
  *
- *
  * BlockHeightStrategy: blockheight pool satrategy
  * {
  *  startBlockCheckAfterSecs: optional, (secs) after that time we will start to pool current blockheight and check if transaction will reach blockchain, default: 90
  *  block: BlockhashWithExpiryBlockHeight
  *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues and blockheight, default: 2000
  * }
+ * @param config.resendTxUntilConfirmed force resend transaction in the mean time of waiting for confirmation, default false
+ * @param config.resendPoolTimeMs when resendTxUntilConfirmed is true it will resend transaction every value of ms until there is timeout, default 2000
  */
 export const sendAndConfirmSignedTransaction = async ({
   signedTransaction,
   confirmLevel = 'processed',
   connection,
-  postSendTxCallback,
+  callbacks,
   timeoutStrategy,
-  resendTxUntilConfirmed = false,
-  runAfterTxConfirmation,
-}: {
-  signedTransaction: Transaction;
-  connection: Connection;
-  confirmLevel?: TransactionConfirmationStatus;
-  timeoutStrategy: TimeStrategy | BlockHeightStrategy;
-  resendTxUntilConfirmed?: boolean;
-  postSendTxCallback?: ({ txid }: { txid: string }) => void;
-  runAfterTxConfirmation?: () => void;
-}) => {
+  config,
+}: sendAndConfirmSignedTransactionProps) => {
   const isBlockHeightStrategy = typeof (timeoutStrategy as BlockHeightStrategy).block !== 'undefined';
   const timeoutConfig = !isBlockHeightStrategy
     ? new TimeStrategyClass({ ...(timeoutStrategy as TimeStrategy) })
@@ -215,19 +230,19 @@ export const sendAndConfirmSignedTransaction = async ({
     skipPreflight: true,
   });
 
-  if (postSendTxCallback) {
+  if (callbacks?.postSendTxCallback) {
     try {
-      postSendTxCallback({ txid });
+      callbacks.postSendTxCallback({ txid });
     } catch (e) {
       console.log(`postSendTxCallback error ${e}`);
     }
   }
 
   let done = false;
-  if (resendTxUntilConfirmed) {
+  if (config?.resendTxUntilConfirmed) {
     (async () => {
       while (!done && getUnixTs() - startTime < resendTimeout!) {
-        await sleep(2000);
+        await sleep(config?.resendPoolTimeMs || 2000);
         connection.sendRawTransaction(rawTransaction, {
           skipPreflight: true,
         });
@@ -242,8 +257,8 @@ export const sendAndConfirmSignedTransaction = async ({
       confirmLevel,
       connection,
     });
-    if (runAfterTxConfirmation) {
-      runAfterTxConfirmation();
+    if (callbacks?.afterTxConfirmation) {
+      callbacks.afterTxConfirmation();
     }
   } catch (err: any) {
     if (err.timeout) {
@@ -285,11 +300,11 @@ export type sendSignAndConfirmTransactionsProps = {
   transactionInstructions: TransactionInstructionWithType[];
   timeoutStrategy?: BlockHeightStrategy;
   callbacks?: {
-    runAfterFirstBatchSign?: (signedTxnsCount: number) => void;
-    runAfterBatchSign?: (signedTxnsCount: number) => void;
-    runAfterAllTxConfirmed?: () => void;
-    runAfterEveryTxConfirmation?: () => void;
-    runOnError?: (
+    afterFirstBatchSign?: (signedTxnsCount: number) => void;
+    afterBatchSign?: (signedTxnsCount: number) => void;
+    afterAllTxConfirmed?: () => void;
+    afterEveryTxConfirmation?: () => void;
+    onError?: (
       e: any,
       notProcessedTransactions: TransactionInstructionWithType[],
       originalProps: sendSignAndConfirmTransactionsProps,
@@ -313,11 +328,17 @@ export type sendSignAndConfirmTransactionsProps = {
  *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues and blockheight, default: 2000
  * }
  *
- * @param callbacks
+ * @param callbacks sets of callbacks
+ * @param callbacks.afterFirstBatchSign callback will run only on first batch approval
+ * @param callbacks.afterBatchSign callback will run on any batch approval
+ * @param callbacks.afterAllTxConfirmed callback will run after all transaction batches are confirmed
+ * @param callbacks.afterEveryTxConfirmation callback will run on every single transaction confirmation
+ * @param callbacks.onError callback will run on error
  *
- * runAfterFirstBatchSign callback will run only on first batch approval
- * runAfterBatchSign callback will run on any batch approval if used no need to add runAfterFirstBatchSign
- * runAfterAllTxConfirmed will run after all batches processing is completed
+ * @param config.maxTxesInBatch max transactions in one batch of transactions, there is limitation on how much wallet can sign in one go depending on used wallet. default 40
+ * @param config.autoRetry auto retry on any error approve and send of transaction after error
+ * @param config.maxRetries if auto retry is true, it will try this amount of times before actual error, default 5
+ * @param config.retired argument passed by recursive function best not to change it, default 0
  */
 export const sendSignAndConfirmTransactions = async ({
   connection,
@@ -337,10 +358,10 @@ export const sendSignAndConfirmTransactions = async ({
   if (!block) {
     block = await connection.getLatestBlockhash('confirmed');
   }
-  if (typeof config.retried === 'undefined') {
+  if (typeof config?.retried === 'undefined') {
     config.retried = 0;
   }
-  if (typeof config.maxRetries === 'undefined') {
+  if (typeof config?.maxRetries === 'undefined') {
     config.maxRetries = 5;
   }
   //block will be used for timeout calculation
@@ -391,10 +412,10 @@ export const sendSignAndConfirmTransactions = async ({
   }
   console.log(transactionCallOrchestrator);
   const signedTxns = await wallet.signAllTransactions(unsignedTxns);
-  if (callbacks?.runAfterFirstBatchSign) {
-    callbacks.runAfterFirstBatchSign(signedTxns.length);
-  } else if (callbacks?.runAfterBatchSign) {
-    callbacks.runAfterBatchSign(signedTxns.length);
+  if (callbacks?.afterFirstBatchSign) {
+    callbacks.afterFirstBatchSign(signedTxns.length);
+  } else if (callbacks?.afterBatchSign) {
+    callbacks.afterBatchSign(signedTxns.length);
   }
   console.log(
     'Transactions play type order',
@@ -422,7 +443,9 @@ export const sendSignAndConfirmTransactions = async ({
                   timeoutStrategy: {
                     block: block!,
                   },
-                  runAfterTxConfirmation: callbacks?.runAfterEveryTxConfirmation,
+                  callbacks: {
+                    afterTxConfirmation: callbacks?.afterEveryTxConfirmation,
+                  },
                 });
                 resolve(resp);
               } catch (e) {
@@ -452,7 +475,9 @@ export const sendSignAndConfirmTransactions = async ({
               timeoutStrategy: {
                 block,
               },
-              runAfterTxConfirmation: callbacks?.runAfterEveryTxConfirmation,
+              callbacks: {
+                afterTxConfirmation: callbacks?.afterEveryTxConfirmation,
+              },
             });
           } catch (e) {
             console.log(e);
@@ -481,23 +506,23 @@ export const sendSignAndConfirmTransactions = async ({
         transactionInstructions: forwardedTransactions,
         timeoutStrategy: timeoutStrategy,
         callbacks: {
-          runAfterBatchSign: callbacks?.runAfterBatchSign,
-          runAfterAllTxConfirmed: callbacks?.runAfterAllTxConfirmed,
-          runAfterEveryTxConfirmation: callbacks?.runAfterEveryTxConfirmation,
-          runOnError: callbacks?.runOnError,
+          afterBatchSign: callbacks?.afterBatchSign,
+          afterAllTxConfirmed: callbacks?.afterAllTxConfirmed,
+          afterEveryTxConfirmation: callbacks?.afterEveryTxConfirmation,
+          onError: callbacks?.onError,
         },
       });
     }
-    if (callbacks?.runAfterAllTxConfirmed) {
-      callbacks.runAfterAllTxConfirmed();
+    if (callbacks?.afterAllTxConfirmed) {
+      callbacks.afterAllTxConfirmed();
     }
   } catch (e) {
     console.log(e);
-    if (callbacks?.runOnError) {
+    if (callbacks?.onError) {
       if (typeof e === 'object') {
         const idx = (e as any).txInstructionIdx;
         const txInstructionForRetry = transactionInstructions.slice(idx, transactionInstructions.length);
-        callbacks.runOnError(e, txInstructionForRetry, {
+        callbacks.onError(e, txInstructionForRetry, {
           connection,
           wallet,
           transactionInstructions,
@@ -506,7 +531,7 @@ export const sendSignAndConfirmTransactions = async ({
           config,
         });
       } else {
-        callbacks.runOnError(e, [], {
+        callbacks.onError(e, [], {
           connection,
           wallet,
           transactionInstructions,
