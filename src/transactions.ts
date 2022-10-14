@@ -31,6 +31,12 @@ export interface TransactionsPlayingIndexes {
   sequenceType?: SequenceType;
 }
 
+export type awaitTransactionSignatureConfirmationProps = {
+  txid: TransactionSignature;
+  confirmLevel: TransactionConfirmationStatus;
+  connection: Connection;
+  timeoutStrategy: TimeStrategy | BlockHeightStrategy;
+};
 /**
  * waits for transaction confirmation
  * @param timeoutStrategy TimeStrategy | BlockHeightStrategy
@@ -53,12 +59,7 @@ export const awaitTransactionSignatureConfirmation = async ({
   confirmLevel,
   connection,
   timeoutStrategy,
-}: {
-  txid: TransactionSignature;
-  confirmLevel: TransactionConfirmationStatus;
-  connection: Connection;
-  timeoutStrategy: TimeStrategy | BlockHeightStrategy;
-}) => {
+}: awaitTransactionSignatureConfirmationProps) => {
   const isBlockHeightStrategy = typeof (timeoutStrategy as BlockHeightStrategy).block !== 'undefined';
   const timeoutConfig = !isBlockHeightStrategy
     ? new TimeStrategyClass({ ...(timeoutStrategy as TimeStrategy) })

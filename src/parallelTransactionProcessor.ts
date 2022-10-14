@@ -84,6 +84,13 @@ const sendInstructions = async (
   return toConfirm;
 };
 
+export type parallelTransactionProcessorProps = {
+  transactionInstructionsWithSigners: TransactionInstructionWithSigners[];
+  connection: Connection;
+  wallet: WalletSigner;
+  batchSize?: number;
+  maxRetryNumber?: number;
+};
 /**
  * sign, send and wait for confirmation of parallel transactions, best for in code keypair wallet
  */
@@ -93,13 +100,7 @@ export const parallelTransactionProcessor = async ({
   wallet,
   batchSize = 50,
   maxRetryNumber = 5,
-}: {
-  transactionInstructionsWithSigners: TransactionInstructionWithSigners[];
-  connection: Connection;
-  wallet: WalletSigner;
-  batchSize?: number;
-  maxRetryNumber?: number;
-}) => {
+}: parallelTransactionProcessorProps) => {
   //interval checking if transactions are confirmed in ms
   const confirmationIntervalPeriod = 5000;
   //If interval run x times and array is empty x times then processor is resolving promise.
