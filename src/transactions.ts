@@ -279,6 +279,29 @@ export const sendAndConfirmSignedTransaction = async ({
   return txid;
 };
 
+export type sendSignAndConfirmTransactionsProps = {
+  connection: Connection;
+  wallet: WalletSigner;
+  transactionInstructions: TransactionInstructionWithType[];
+  timeoutStrategy?: BlockHeightStrategy;
+  callbacks?: {
+    runAfterFirstBatchSign?: (signedTxnsCount: number) => void;
+    runAfterBatchSign?: (signedTxnsCount: number) => void;
+    runAfterAllTxConfirmed?: () => void;
+    runAfterEveryTxConfirmation?: () => void;
+    runOnError?: (
+      e: any,
+      notProcessedTransactions: TransactionInstructionWithType[],
+      originalProps: sendSignAndConfirmTransactionsProps,
+    ) => void;
+  };
+  config?: {
+    maxTxesInBatch: number;
+    autoRetry: boolean;
+    maxRetries?: number;
+    retried?: number;
+  };
+};
 /**
  * sign and send array of transactions in desired batches with different styles of send for each array
  * @param timeoutStrategy
@@ -308,25 +331,7 @@ export const sendSignAndConfirmTransactions = async ({
     maxRetries: 5,
     retried: 0,
   },
-}: {
-  connection: Connection;
-  wallet: WalletSigner;
-  transactionInstructions: TransactionInstructionWithType[];
-  timeoutStrategy?: BlockHeightStrategy;
-  callbacks?: {
-    runAfterFirstBatchSign?: (signedTxnsCount: number) => void;
-    runAfterBatchSign?: (signedTxnsCount: number) => void;
-    runAfterAllTxConfirmed?: () => void;
-    runAfterEveryTxConfirmation?: () => void;
-    runOnError?: (e: any, notProcessedTransactions: TransactionInstructionWithType[]) => void;
-  };
-  config?: {
-    maxTxesInBatch: number;
-    autoRetry: boolean;
-    maxRetries?: number;
-    retried?: number;
-  };
-}) => {
+}: sendSignAndConfirmTransactionsProps) => {
   let block = timeoutStrategy?.block;
   if (!wallet.publicKey) throw new Error('Wallet not connected!');
   if (!block) {
@@ -492,9 +497,23 @@ export const sendSignAndConfirmTransactions = async ({
       if (typeof e === 'object') {
         const idx = (e as any).txInstructionIdx;
         const txInstructionForRetry = transactionInstructions.slice(idx, transactionInstructions.length);
-        callbacks.runOnError(e, txInstructionForRetry);
+        callbacks.runOnError(e, txInstructionForRetry, {
+          connection,
+          wallet,
+          transactionInstructions,
+          timeoutStrategy,
+          callbacks,
+          config,
+        });
       } else {
-        callbacks.runOnError(e, []);
+        callbacks.runOnError(e, [], {
+          connection,
+          wallet,
+          transactionInstructions,
+          timeoutStrategy,
+          callbacks,
+          config,
+        });
       }
     }
     if (config.autoRetry && config.maxRetries < config.retried) {
