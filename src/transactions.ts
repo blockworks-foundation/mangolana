@@ -196,7 +196,6 @@ export const sendAndConfirmSignedTransaction = async ({
   postSendTxCallback?: ({ txid }: { txid: string }) => void;
   timeoutStrategy: TimeStrategy | BlockHeightStrategy;
 }) => {
-  console.log('34534534');
   const isBlockHeightStrategy = typeof (timeoutStrategy as BlockHeightStrategy).block !== 'undefined';
   const timeoutConfig = !isBlockHeightStrategy
     ? new TimeStrategyClass({ ...(timeoutStrategy as TimeStrategy) })
