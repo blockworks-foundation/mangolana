@@ -115,7 +115,7 @@ export const awaitTransactionSignatureConfirmation = async ({
         done = true;
         console.log('WS error in setup', txid, e);
       }
-      const retrySleep = timeoutStrategy.getSignatureStatusesPoolIntervalMs!;
+      const retrySleep = timeoutStrategy.getSignatureStatusesPoolIntervalMs || 5000;
       while (!done) {
         // eslint-disable-next-line no-loop-func
         await sleep(retrySleep);
