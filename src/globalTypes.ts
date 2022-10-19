@@ -41,7 +41,7 @@ export class TimeStrategyClass implements TimeStrategy {
   getSignatureStatusesPoolIntervalMs: number;
   constructor({
     timeout = 90,
-    getSignatureStatusesPoolIntervalMs = 2000,
+    getSignatureStatusesPoolIntervalMs = 5000,
   }: {
     timeout: number;
     getSignatureStatusesPoolIntervalMs?: number;
@@ -57,7 +57,7 @@ export class BlockHeightStrategyClass implements BlockHeightStrategy {
   constructor({
     startBlockCheckAfterSecs = 90,
     block,
-    getSignatureStatusesPoolIntervalMs = 2000,
+    getSignatureStatusesPoolIntervalMs = 5000,
   }: {
     block: BlockhashWithExpiryBlockHeight;
     getSignatureStatusesPoolIntervalMs?: number;

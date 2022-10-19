@@ -74,7 +74,6 @@ export const awaitTransactionSignatureConfirmation = async ({
   let startTimeoutCheck = false;
   let done = false;
   const confirmLevels: (TransactionConfirmationStatus | null | undefined)[] = ['finalized'];
-
   if (confirmLevel === 'confirmed') {
     confirmLevels.push('confirmed');
   } else if (confirmLevel === 'processed') {
@@ -115,7 +114,7 @@ export const awaitTransactionSignatureConfirmation = async ({
         done = true;
         console.log('WS error in setup', txid, e);
       }
-      const retrySleep = timeoutStrategy.getSignatureStatusesPoolIntervalMs || 5000;
+      const retrySleep = timeoutConfig.getSignatureStatusesPoolIntervalMs || 5000;
       while (!done) {
         // eslint-disable-next-line no-loop-func
         await sleep(retrySleep);
@@ -196,7 +195,7 @@ export type sendAndConfirmSignedTransactionProps = {
  * TimeStrategy: pure timeout strategy
  *
  *  timeout: optional, (secs) after how much secs not confirmed transaction will be considered timeout, default: 90
- *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues, default: 2000
+ *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues, default: 5000
  *
  *
  * BlockHeightStrategy: blockheight pool satrategy
@@ -230,7 +229,7 @@ export const sendAndConfirmSignedTransaction = async ({
   txid = await connection.sendRawTransaction(rawTransaction, {
     skipPreflight: true,
   });
-
+  console.log(txid);
   if (callbacks?.postSendTxCallback) {
     try {
       callbacks.postSendTxCallback({ txid });
