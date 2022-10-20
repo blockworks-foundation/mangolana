@@ -14,6 +14,8 @@ import { getUnixTs, MAXIMUM_NUMBER_OF_BLOCKS_FOR_TRANSACTION, sleep } from './to
 import {
   BlockHeightStrategy,
   BlockHeightStrategyClass,
+  getTimeoutConfig,
+  isBlockHeightStrategy,
   SequenceType,
   TimeStrategy,
   TimeStrategyClass,
@@ -60,16 +62,15 @@ export const awaitTransactionSignatureConfirmation = async ({
   connection,
   timeoutStrategy,
 }: awaitTransactionSignatureConfirmationProps) => {
-  const isBlockHeightStrategy = typeof (timeoutStrategy as BlockHeightStrategy).block !== 'undefined';
-  const timeoutConfig = !isBlockHeightStrategy
-    ? new TimeStrategyClass({ ...(timeoutStrategy as TimeStrategy) })
-    : new BlockHeightStrategyClass({ ...(timeoutStrategy as BlockHeightStrategy) });
-  const timeoutBlockHeight = isBlockHeightStrategy
-    ? (timeoutConfig as BlockHeightStrategy).block.lastValidBlockHeight + MAXIMUM_NUMBER_OF_BLOCKS_FOR_TRANSACTION
-    : 0;
-  const timeout = isBlockHeightStrategy
-    ? (timeoutConfig as BlockHeightStrategy).startBlockCheckAfterSecs
-    : (timeoutConfig as TimeStrategy).timeout;
+  const timeoutConfig = getTimeoutConfig(timeoutStrategy);
+  let timeoutBlockHeight = 0;
+  let timeout = 0;
+  if (timeoutConfig instanceof BlockHeightStrategyClass) {
+    timeoutBlockHeight = timeoutConfig.block.lastValidBlockHeight + MAXIMUM_NUMBER_OF_BLOCKS_FOR_TRANSACTION;
+    timeout = timeoutConfig.startBlockCheckAfterSecs;
+  } else {
+    timeout = timeoutConfig.timeout;
+  }
 
   let startTimeoutCheck = false;
   let done = false;
@@ -215,13 +216,13 @@ export const sendAndConfirmSignedTransaction = async ({
   timeoutStrategy,
   config,
 }: sendAndConfirmSignedTransactionProps) => {
-  const isBlockHeightStrategy = typeof (timeoutStrategy as BlockHeightStrategy).block !== 'undefined';
-  const timeoutConfig = !isBlockHeightStrategy
-    ? new TimeStrategyClass({ ...(timeoutStrategy as TimeStrategy) })
-    : new BlockHeightStrategyClass({ ...(timeoutStrategy as BlockHeightStrategy) });
-  const resendTimeout = !isBlockHeightStrategy
-    ? (timeoutConfig as TimeStrategy).timeout
-    : (timeoutConfig as BlockHeightStrategy).startBlockCheckAfterSecs;
+  const timeoutConfig = getTimeoutConfig(timeoutStrategy);
+  let resendTimeout = 0;
+  if (timeoutConfig instanceof BlockHeightStrategyClass) {
+    resendTimeout = timeoutConfig.startBlockCheckAfterSecs;
+  } else {
+    resendTimeout = timeoutConfig.timeout;
+  }
 
   const rawTransaction = signedTransaction.serialize();
   let txid = bs58.encode(signedTransaction.signatures[0].signature!);

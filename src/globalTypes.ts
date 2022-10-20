@@ -17,25 +17,26 @@ export enum SequenceType {
   StopOnFailure,
 }
 
+interface TimeoutStrategy {
+  getSignatureStatusesPoolIntervalMs?: number;
+}
+
 /**
  * @param timeout optional (secs) after how much secs not confirmed transaction will be considered timeout, default: 90
  * @param getSignatureStatusesPoolIntervalMs optional (ms) pool interval of getSignatureStatues, default: 2000
  */
-export type TimeStrategy = {
+interface Time {
   timeout: number;
-  getSignatureStatusesPoolIntervalMs?: number;
-};
-
+}
 /**
  * @param startBlockCheckAfterSecs optional (secs) after that time we will start to pool current blockheight and check if transaction will reach blockchain, default: 90
  * @param block BlockhashWithExpiryBlockHeight
  * @param getSignatureStatusesPoolIntervalMs optional (ms) pool interval of getSignatureStatues and blockheight, default: 2000
  */
-export type BlockHeightStrategy = {
+interface BlockHeight {
   startBlockCheckAfterSecs?: number;
   block: BlockhashWithExpiryBlockHeight;
-  getSignatureStatusesPoolIntervalMs?: number;
-};
+}
 export class TimeStrategyClass implements TimeStrategy {
   timeout: number;
   getSignatureStatusesPoolIntervalMs: number;
@@ -68,3 +69,20 @@ export class BlockHeightStrategyClass implements BlockHeightStrategy {
     this.getSignatureStatusesPoolIntervalMs = getSignatureStatusesPoolIntervalMs;
   }
 }
+
+export type BlockHeightStrategy = TimeoutStrategy & BlockHeight;
+export type TimeStrategy = TimeoutStrategy & Time;
+
+export const isBlockHeightStrategy = (
+  timeoutStrategy: BlockHeightStrategy | TimeStrategy,
+): timeoutStrategy is BlockHeightStrategy => {
+  return 'block' in (timeoutStrategy as BlockHeightStrategy);
+};
+
+export const getTimeoutConfig = (timeoutStrategy: BlockHeightStrategy | TimeStrategy) => {
+  const isBhStrategy = isBlockHeightStrategy(timeoutStrategy);
+  const timeoutConfig = !isBhStrategy
+    ? new TimeStrategyClass({ ...timeoutStrategy })
+    : new BlockHeightStrategyClass({ ...timeoutStrategy });
+  return timeoutConfig;
+};
