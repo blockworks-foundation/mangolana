@@ -36,6 +36,9 @@ export type awaitTransactionSignatureConfirmationProps = {
   confirmLevel: TransactionConfirmationStatus;
   connection: Connection;
   timeoutStrategy: TimeStrategy | BlockHeightStrategy;
+  config?: {
+    logFlowInfo?: boolean;
+  };
 };
 /**
  * waits for transaction confirmation
@@ -52,14 +55,16 @@ export type awaitTransactionSignatureConfirmationProps = {
  *  startBlockCheckAfterSecs: optional, (secs) after that time we will start to pool current blockheight and check if transaction will reach blockchain, default: 90
  *  block: BlockhashWithExpiryBlockHeight
  *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues and blockheight, default: 2000
- *
+ * @param config.logFlowInfo when true it will console log process of processing transactions
  */
 export const awaitTransactionSignatureConfirmation = async ({
   txid,
   confirmLevel,
   connection,
   timeoutStrategy,
+  config,
 }: awaitTransactionSignatureConfirmationProps) => {
+  const logger = new Logger({ ...config });
   const timeoutConfig = getTimeoutConfig(timeoutStrategy);
   let timeoutBlockHeight = 0;
   let timeout = 0;
@@ -91,7 +96,7 @@ export const awaitTransactionSignatureConfirmation = async ({
           startTimeoutCheck = true;
         } else {
           done = true;
-          console.log('Timed out for txid: ', txid);
+          logger.log('Timed out for txid: ', txid);
           reject({ timeout: true });
         }
       }, timeout);
@@ -111,7 +116,7 @@ export const awaitTransactionSignatureConfirmation = async ({
         );
       } catch (e) {
         done = true;
-        console.log('WS error in setup', txid, e);
+        logger.log('WS error in setup', txid, e);
       }
       const retrySleep = timeoutConfig.getSignatureStatusesPoolIntervalMs || 5000;
       while (!done) {
@@ -129,7 +134,7 @@ export const awaitTransactionSignatureConfirmation = async ({
             }
             const [signatureStatuses, currentBlockHeight] = await Promise.all(promises);
             if (typeof currentBlockHeight !== undefined && timeoutBlockHeight <= currentBlockHeight!) {
-              console.log('Timed out for txid: ', txid);
+              logger.log('Timed out for txid: ', txid);
               done = true;
               reject({ timeout: true });
             }
@@ -138,20 +143,20 @@ export const awaitTransactionSignatureConfirmation = async ({
             if (!done) {
               if (!result) return;
               if (result.err) {
-                console.log('REST error for', txid, result);
+                logger.log('REST error for', txid, result);
                 done = true;
                 reject(result.err);
               } else if (!(result.confirmations || confirmLevels.includes(result.confirmationStatus))) {
-                console.log('REST not confirmed', txid, result);
+                logger.log('REST not confirmed', txid, result);
               } else {
-                console.log('REST confirmed', txid, result);
+                logger.log('REST confirmed', txid, result);
                 done = true;
                 resolve(result);
               }
             }
           } catch (e) {
             if (!done) {
-              console.log('REST connection error: txid', txid, e);
+              logger.log('REST connection error: txid', txid, e);
             }
           }
         })();
@@ -161,7 +166,7 @@ export const awaitTransactionSignatureConfirmation = async ({
 
   if (subscriptionId) {
     connection.removeSignatureListener(subscriptionId).catch((e) => {
-      console.log('WS error in cleanup', e);
+      logger.log('WS error in cleanup', e);
     });
   }
 
@@ -259,6 +264,7 @@ export const sendAndConfirmSignedTransaction = async ({
       timeoutStrategy: timeoutStrategy,
       confirmLevel,
       connection,
+      config,
     });
     if (callbacks?.afterTxConfirmation) {
       callbacks.afterTxConfirmation();
@@ -269,7 +275,7 @@ export const sendAndConfirmSignedTransaction = async ({
     }
     let simulateResult: SimulatedTransactionResponse | null = null;
     try {
-      simulateResult = (await simulateTransaction(connection, signedTransaction, 'single')).value;
+      simulateResult = (await simulateTransaction(connection, signedTransaction, 'single', config?.logFlowInfo)).value;
     } catch (e) {
       logger.log('Simulate tx failed');
     }
@@ -574,29 +580,31 @@ export async function simulateTransaction(
   connection: Connection,
   transaction: Transaction,
   commitment: Commitment,
+  logInfo?: boolean,
 ): Promise<RpcResponseAndContext<SimulatedTransactionResponse>> {
+  const logger = new Logger({ logFlowInfo: !!logInfo });
   // @ts-ignore
   transaction.recentBlockhash = await connection._recentBlockhash(
     // @ts-ignore
     connection._disableBlockhashCaching,
   );
 
-  console.log('simulating transaction', transaction);
+  logger.log('simulating transaction', transaction);
 
   const signData = transaction.serializeMessage();
   // @ts-ignore
   const wireTransaction = transaction._serialize(signData);
   const encodedTransaction = wireTransaction.toString('base64');
 
-  console.log('encoding');
+  logger.log('encoding');
   const config: any = { encoding: 'base64', commitment };
   const args = [encodedTransaction, config];
-  console.log('simulating data', args);
+  logger.log('simulating data', args);
 
   // @ts-ignore
   const res = await connection._rpcRequest('simulateTransaction', args);
 
-  console.log('res simulating transaction', res);
+  logger.log('res simulating transaction', res);
   if (res.error) {
     throw new Error('failed to simulate transaction: ' + res.error.message);
   }
