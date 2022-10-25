@@ -4,7 +4,7 @@ export type WalletSigner = Pick<any, 'publicKey' | 'signTransaction' | 'signAllT
 
 export class TransactionInstructionWithSigners {
   transactionInstruction: TransactionInstruction;
-  signers: Keypair[];
+  signers?: Keypair[];
   constructor(transactionInstruction: TransactionInstruction, signers: Keypair[] = []) {
     this.transactionInstruction = transactionInstruction;
     this.signers = signers;
@@ -17,7 +17,7 @@ export enum SequenceType {
   StopOnFailure,
 }
 
-interface TimeoutStrategy {
+export interface TimeoutStrategy {
   getSignatureStatusesPoolIntervalMs?: number;
 }
 
@@ -25,7 +25,7 @@ interface TimeoutStrategy {
  * @param timeout optional (secs) after how much secs not confirmed transaction will be considered timeout, default: 90
  * @param getSignatureStatusesPoolIntervalMs optional (ms) pool interval of getSignatureStatues, default: 2000
  */
-interface Time {
+export interface Time {
   timeout: number;
 }
 /**
@@ -33,7 +33,7 @@ interface Time {
  * @param block BlockhashWithExpiryBlockHeight
  * @param getSignatureStatusesPoolIntervalMs optional (ms) pool interval of getSignatureStatues and blockheight, default: 2000
  */
-interface BlockHeight {
+export interface BlockHeight {
   startBlockCheckAfterSecs?: number;
   block: BlockhashWithExpiryBlockHeight;
 }

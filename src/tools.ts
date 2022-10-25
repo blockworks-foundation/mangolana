@@ -16,3 +16,15 @@ export function chunks<T>(array: T[], size: number): T[][] {
 }
 
 export const MAXIMUM_NUMBER_OF_BLOCKS_FOR_TRANSACTION = 152;
+
+export class Logger {
+  logFlowInfo: boolean = false;
+  constructor({ logFlowInfo = false }: { logFlowInfo?: boolean }) {
+    this.logFlowInfo = logFlowInfo;
+  }
+  log(message?: any, ...optionalParams: any[]) {
+    if (this.logFlowInfo) {
+      console.log(message, ...optionalParams);
+    }
+  }
+}

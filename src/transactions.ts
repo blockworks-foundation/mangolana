@@ -10,15 +10,13 @@ import {
   TransactionSignature,
 } from '@solana/web3.js';
 import bs58 = require('bs58');
-import { getUnixTs, MAXIMUM_NUMBER_OF_BLOCKS_FOR_TRANSACTION, sleep } from './tools';
+import { getUnixTs, Logger, MAXIMUM_NUMBER_OF_BLOCKS_FOR_TRANSACTION, sleep } from './tools';
 import {
   BlockHeightStrategy,
   BlockHeightStrategyClass,
   getTimeoutConfig,
-  isBlockHeightStrategy,
   SequenceType,
   TimeStrategy,
-  TimeStrategyClass,
   TransactionInstructionWithSigners,
   WalletSigner,
 } from './globalTypes';
@@ -183,6 +181,7 @@ export type sendAndConfirmSignedTransactionProps = {
   config?: {
     resendTxUntilConfirmed?: boolean;
     resendPoolTimeMs?: number;
+    logFlowInfo?: boolean;
   };
 };
 
@@ -207,6 +206,7 @@ export type sendAndConfirmSignedTransactionProps = {
  *
  * @param config.resendTxUntilConfirmed force resend transaction in the mean time of waiting for confirmation, default false
  * @param config.resendPoolTimeMs when resendTxUntilConfirmed is true it will resend transaction every value of ms until there is timeout, default 2000
+ * @param config.logFlowInfo when true it will console log process of processing transactions
  */
 export const sendAndConfirmSignedTransaction = async ({
   signedTransaction,
@@ -216,6 +216,7 @@ export const sendAndConfirmSignedTransaction = async ({
   timeoutStrategy,
   config,
 }: sendAndConfirmSignedTransactionProps) => {
+  const logger = new Logger({ ...config });
   const timeoutConfig = getTimeoutConfig(timeoutStrategy);
   let resendTimeout = 0;
   if (timeoutConfig instanceof BlockHeightStrategyClass) {
@@ -223,19 +224,20 @@ export const sendAndConfirmSignedTransaction = async ({
   } else {
     resendTimeout = timeoutConfig.timeout;
   }
-
+  if (config?.resendTxUntilConfirmed) {
+    config.resendPoolTimeMs ||= 2000;
+  }
   const rawTransaction = signedTransaction.serialize();
   let txid = bs58.encode(signedTransaction.signatures[0].signature!);
   const startTime = getUnixTs();
   txid = await connection.sendRawTransaction(rawTransaction, {
     skipPreflight: true,
   });
-  console.log(txid);
   if (callbacks?.postSendTxCallback) {
     try {
       callbacks.postSendTxCallback({ txid });
     } catch (e) {
-      console.log(`postSendTxCallback error ${e}`);
+      logger.log(`postSendTxCallback error ${e}`);
     }
   }
 
@@ -269,7 +271,7 @@ export const sendAndConfirmSignedTransaction = async ({
     try {
       simulateResult = (await simulateTransaction(connection, signedTransaction, 'single')).value;
     } catch (e) {
-      console.log('Simulate tx failed');
+      logger.log('Simulate tx failed');
     }
     if (simulateResult && simulateResult.err) {
       if (simulateResult.logs) {
@@ -316,6 +318,7 @@ export type sendSignAndConfirmTransactionsProps = {
     autoRetry: boolean;
     maxRetries?: number;
     retried?: number;
+    logFlowInfo?: boolean;
   };
 };
 /**
@@ -340,6 +343,7 @@ export type sendSignAndConfirmTransactionsProps = {
  * @param config.autoRetry auto retry on any error approve and send of transaction after error
  * @param config.maxRetries if auto retry is true, it will try this amount of times before actual error, default 5
  * @param config.retired argument passed by recursive function best not to change it, default 0
+ * @param config.logFlowInfo when true it will console log process of processing transactions
  */
 export const sendSignAndConfirmTransactions = async ({
   connection,
@@ -352,8 +356,10 @@ export const sendSignAndConfirmTransactions = async ({
     autoRetry: false,
     maxRetries: 5,
     retried: 0,
+    logFlowInfo: false,
   },
 }: sendSignAndConfirmTransactionsProps) => {
+  const logger = new Logger({ ...config });
   let block = timeoutStrategy?.block;
   if (!wallet.publicKey) throw new Error('Wallet not connected!');
   if (!block) {
@@ -382,12 +388,12 @@ export const sendSignAndConfirmTransactions = async ({
     const transaction = new Transaction({ feePayer: wallet.publicKey });
     transactionInstruction.instructionsSet.forEach((instruction) => {
       transaction.add(instruction.transactionInstruction);
-      if (instruction.signers.length) {
+      if (instruction.signers?.length) {
         signers.push(...instruction.signers);
       }
     });
     transaction.recentBlockhash = block.blockhash;
-    if (signers.length) {
+    if (signers?.length) {
       transaction.partialSign(...signers);
     }
     //we take last index of unsignedTransactions to have right indexes because
@@ -411,14 +417,14 @@ export const sendSignAndConfirmTransactions = async ({
     }
     unsignedTxns.push(transaction);
   }
-  console.log(transactionCallOrchestrator);
+  logger.log(transactionCallOrchestrator);
   const signedTxns = await wallet.signAllTransactions(unsignedTxns);
   if (callbacks?.afterFirstBatchSign) {
     callbacks.afterFirstBatchSign(signedTxns.length);
   } else if (callbacks?.afterBatchSign) {
     callbacks.afterBatchSign(signedTxns.length);
   }
-  console.log(
+  logger.log(
     'Transactions play type order',
     transactionCallOrchestrator.map((x) => {
       return {
@@ -427,7 +433,7 @@ export const sendSignAndConfirmTransactions = async ({
       };
     }),
   );
-  console.log('Signed transactions', signedTxns);
+  logger.log('Signed transactions', signedTxns);
   try {
     for (const fcn of transactionCallOrchestrator) {
       if (typeof fcn.sequenceType === 'undefined' || fcn.sequenceType === SequenceType.Parallel) {
@@ -450,7 +456,7 @@ export const sendSignAndConfirmTransactions = async ({
                 });
                 resolve(resp);
               } catch (e) {
-                console.log(e);
+                logger.log(e);
                 if (typeof e === 'object') {
                   reject({
                     ...e,
@@ -481,7 +487,7 @@ export const sendSignAndConfirmTransactions = async ({
               },
             });
           } catch (e) {
-            console.log(e);
+            logger.log(e);
             if (typeof e === 'object') {
               throw {
                 ...e,
@@ -518,7 +524,7 @@ export const sendSignAndConfirmTransactions = async ({
       callbacks.afterAllTxConfirmed();
     }
   } catch (e) {
-    console.log(e);
+    logger.log(e);
     if (callbacks?.onError) {
       if (typeof e === 'object') {
         const idx = (e as any).txInstructionIdx;

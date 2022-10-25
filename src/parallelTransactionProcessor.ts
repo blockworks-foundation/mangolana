@@ -41,7 +41,7 @@ const sendTransactionChunk = async (
     const transaction = new Transaction({ feePayer: wallet.publicKey });
     transaction.add(tiws.transactionInstruction);
     transaction.recentBlockhash = block.blockhash;
-    if (tiws.signers.length > 0) {
+    if (tiws.signers && tiws.signers.length > 0) {
       transaction.partialSign(...tiws.signers);
     }
     return transaction;
