@@ -583,11 +583,9 @@ export async function simulateTransaction(
   logInfo?: boolean,
 ): Promise<RpcResponseAndContext<SimulatedTransactionResponse>> {
   const logger = new Logger({ logFlowInfo: !!logInfo });
-  // @ts-ignore
-  transaction.recentBlockhash = await connection._recentBlockhash(
-    // @ts-ignore
-    connection._disableBlockhashCaching,
-  );
+  const latestBlockhash = await connection.getLatestBlockhash();
+  transaction.lastValidBlockHeight = latestBlockhash.lastValidBlockHeight;
+  transaction.recentBlockhash = latestBlockhash.blockhash;
 
   logger.log('simulating transaction', transaction);
 
