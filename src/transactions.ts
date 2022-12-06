@@ -270,6 +270,7 @@ export const sendAndConfirmSignedTransaction = async ({
       callbacks.afterTxConfirmation();
     }
   } catch (err: any) {
+    logger.log(err);
     if (err.timeout) {
       throw { txid };
     }
@@ -277,8 +278,9 @@ export const sendAndConfirmSignedTransaction = async ({
     try {
       simulateResult = (await simulateTransaction(connection, signedTransaction, 'single', config?.logFlowInfo)).value;
     } catch (e) {
-      logger.log('Simulate tx failed');
+      logger.log('Simulate tx failed', e);
     }
+    logger.log(simulateResult);
     if (simulateResult && simulateResult.err) {
       if (simulateResult.logs) {
         for (let i = simulateResult.logs.length - 1; i >= 0; --i) {
