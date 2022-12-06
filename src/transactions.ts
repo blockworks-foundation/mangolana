@@ -461,6 +461,7 @@ export const sendSignAndConfirmTransactions = async ({
                   callbacks: {
                     afterTxConfirmation: callbacks?.afterEveryTxConfirmation,
                   },
+                  config,
                 });
                 resolve(resp);
               } catch (e) {
@@ -493,6 +494,7 @@ export const sendSignAndConfirmTransactions = async ({
               callbacks: {
                 afterTxConfirmation: callbacks?.afterEveryTxConfirmation,
               },
+              config,
             });
           } catch (e) {
             logger.log(e);
@@ -526,6 +528,7 @@ export const sendSignAndConfirmTransactions = async ({
           afterEveryTxConfirmation: callbacks?.afterEveryTxConfirmation,
           onError: callbacks?.onError,
         },
+        config,
       });
     }
     if (callbacks?.afterAllTxConfirmed) {
