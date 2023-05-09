@@ -167,7 +167,7 @@ export const parallelTransactionProcessor = async ({
         }>?,
       ] = [connection.getSignatureStatuses([...toConfirm.slice(0, maxConfirmBatchSize).map((x) => x.id)])];
       if (startBlockCheck) {
-        statusChecks.push(connection.getLatestBlockhash('processed'));
+        statusChecks.push(connection.getLatestBlockhash('confirmed'));
       }
       //checking signatures + after timeoutPeriod we start checking current block
       const [signatures, block] = await Promise.all(statusChecks);
