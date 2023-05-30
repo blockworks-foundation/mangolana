@@ -112,7 +112,7 @@ export const awaitTransactionSignatureConfirmation = async ({
               resolve(result);
             }
           },
-          'confirmed',
+          confirmLevel,
         );
       } catch (e) {
         done = true;
@@ -215,7 +215,7 @@ export type sendAndConfirmSignedTransactionProps = {
  */
 export const sendAndConfirmSignedTransaction = async ({
   signedTransaction,
-  confirmLevel = 'confirmed',
+  confirmLevel = 'processed',
   connection,
   callbacks,
   timeoutStrategy,
@@ -310,6 +310,7 @@ export type sendSignAndConfirmTransactionsProps = {
   wallet: WalletSigner;
   transactionInstructions: TransactionInstructionWithType[];
   timeoutStrategy?: BlockHeightStrategy;
+  confirmLevel?: TransactionConfirmationStatus;
   callbacks?: {
     afterFirstBatchSign?: (signedTxnsCount: number) => void;
     afterBatchSign?: (signedTxnsCount: number) => void;
@@ -357,6 +358,7 @@ export const sendSignAndConfirmTransactions = async ({
   connection,
   wallet,
   transactionInstructions,
+  confirmLevel = 'processed',
   timeoutStrategy,
   callbacks,
   config = {
@@ -455,6 +457,7 @@ export const sendSignAndConfirmTransactions = async ({
                 const resp = await sendAndConfirmSignedTransaction({
                   connection,
                   signedTransaction: signedTxns[transactionIdx],
+                  confirmLevel,
                   timeoutStrategy: {
                     block: block!,
                   },
@@ -488,6 +491,7 @@ export const sendSignAndConfirmTransactions = async ({
             await sendAndConfirmSignedTransaction({
               connection,
               signedTransaction: signedTxns[transactionIdx],
+              confirmLevel,
               timeoutStrategy: {
                 block,
               },
@@ -520,6 +524,7 @@ export const sendSignAndConfirmTransactions = async ({
       await sendSignAndConfirmTransactions({
         connection,
         wallet,
+        confirmLevel,
         transactionInstructions: forwardedTransactions,
         timeoutStrategy: timeoutStrategy,
         callbacks: {
@@ -543,6 +548,7 @@ export const sendSignAndConfirmTransactions = async ({
         callbacks.onError(e, txInstructionForRetry, {
           connection,
           wallet,
+          confirmLevel,
           transactionInstructions,
           timeoutStrategy,
           callbacks,
@@ -552,6 +558,7 @@ export const sendSignAndConfirmTransactions = async ({
         callbacks.onError(e, [], {
           connection,
           wallet,
+          confirmLevel,
           transactionInstructions,
           timeoutStrategy,
           callbacks,
@@ -567,6 +574,7 @@ export const sendSignAndConfirmTransactions = async ({
         await sendSignAndConfirmTransactions({
           connection,
           wallet,
+          confirmLevel,
           transactionInstructions: txInstructionForRetry,
           callbacks,
           config,
