@@ -112,7 +112,7 @@ export const awaitTransactionSignatureConfirmation = async ({
               resolve(result);
             }
           },
-          'processed',
+          'confirmed',
         );
       } catch (e) {
         done = true;
@@ -215,7 +215,7 @@ export type sendAndConfirmSignedTransactionProps = {
  */
 export const sendAndConfirmSignedTransaction = async ({
   signedTransaction,
-  confirmLevel = 'processed',
+  confirmLevel = 'confirmed',
   connection,
   callbacks,
   timeoutStrategy,
