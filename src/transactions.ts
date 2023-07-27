@@ -187,6 +187,7 @@ export type sendAndConfirmSignedTransactionProps = {
     resendTxUntilConfirmed?: boolean;
     resendPoolTimeMs?: number;
     logFlowInfo?: boolean;
+    skipPreflight?: boolean;
   };
 };
 
@@ -212,6 +213,7 @@ export type sendAndConfirmSignedTransactionProps = {
  * @param config.resendTxUntilConfirmed force resend transaction in the mean time of waiting for confirmation, default false
  * @param config.resendPoolTimeMs when resendTxUntilConfirmed is true it will resend transaction every value of ms until there is timeout, default 2000
  * @param config.logFlowInfo when true it will console log process of processing transactions
+ * @param config.skipPreflight
  */
 export const sendAndConfirmSignedTransaction = async ({
   signedTransaction,
@@ -236,7 +238,7 @@ export const sendAndConfirmSignedTransaction = async ({
   let txid = bs58.encode(signedTransaction.signatures[0].signature!);
   const startTime = getUnixTs();
   txid = await connection.sendRawTransaction(rawTransaction, {
-    skipPreflight: true,
+    skipPreflight: config?.skipPreflight === undefined ? true : config.skipPreflight,
   });
   if (callbacks?.postSendTxCallback) {
     try {
@@ -252,7 +254,7 @@ export const sendAndConfirmSignedTransaction = async ({
       while (!done && getUnixTs() - startTime < resendTimeout!) {
         await sleep(config?.resendPoolTimeMs || 2000);
         connection.sendRawTransaction(rawTransaction, {
-          skipPreflight: true,
+          skipPreflight: config?.skipPreflight === undefined ? true : config.skipPreflight,
         });
       }
     })();
