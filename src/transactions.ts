@@ -544,8 +544,8 @@ export const sendSignAndConfirmTransactions = async ({
   } catch (e) {
     logger.log(e);
     if (callbacks?.onError) {
-      if (typeof e === 'object') {
-        const idx = (e as any).txInstructionIdx;
+      if (typeof e === 'object' && (e as any).transactionInstructionIdx !== undefined) {
+        const idx = (e as any).transactionInstructionIdx;
         const txInstructionForRetry = transactionInstructions.slice(idx, transactionInstructions.length);
         callbacks.onError(e, txInstructionForRetry, {
           connection,
@@ -569,7 +569,7 @@ export const sendSignAndConfirmTransactions = async ({
       }
     }
     if (config.autoRetry && config.maxRetries < config.retried) {
-      const idx = (e as any)?.txInstructionIdx;
+      const idx = (e as any)?.transactionInstructionIdx;
       if (typeof idx !== 'undefined') {
         config.retried++;
         const txInstructionForRetry = transactionInstructions.slice(idx, transactionInstructions.length);
