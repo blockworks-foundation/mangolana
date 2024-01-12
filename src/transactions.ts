@@ -149,6 +149,7 @@ const confirmWithSignatureStatuses = (
         }
       } catch (e) {
         logger.log('REST connection error: txid', txid, e);
+        reject(e);
       }
     }, retryTimer);
   });
@@ -190,6 +191,7 @@ const confirmWithWebSockets = (
         confirmLevel,
       );
     } catch (e) {
+      reject(e);
       logger.log('WS error in setup', txid, e);
     }
     if (subscriptionId) {
