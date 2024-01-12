@@ -1,6 +1,6 @@
 {
   "name": "@blockworks-foundation/mangolana",
-  "version": "0.0.1-beta.16",
+  "version": "0.0.2",
   "description": "",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -30,7 +30,7 @@
   },
   "homepage": "https://github.com/blockworks-foundation/mangolana#readme",
   "dependencies": {
-    "@solana/web3.js": "^1.63.1",
+    "@solana/web3.js": "^1.88.0",
     "bs58": "^5.0.0",
     "node-fetch": "^3.2.10"
   },

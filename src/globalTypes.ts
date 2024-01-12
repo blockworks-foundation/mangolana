@@ -56,7 +56,7 @@ export class BlockHeightStrategyClass implements BlockHeightStrategy {
   block: BlockhashWithExpiryBlockHeight;
   getSignatureStatusesPoolIntervalMs: number;
   constructor({
-    startBlockCheckAfterSecs = 90,
+    startBlockCheckAfterSecs = 10,
     block,
     getSignatureStatusesPoolIntervalMs = 5000,
   }: {
