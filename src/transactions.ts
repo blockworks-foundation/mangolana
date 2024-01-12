@@ -131,6 +131,8 @@ const confirmWithSignatureStatuses = (
     intervalTimeout = setInterval(async () => {
       try {
         const result = await connection.getSignatureStatus(txid);
+        logger.log('REST result', result);
+
         if (!result) return;
 
         if (result.value?.err) {
@@ -138,8 +140,8 @@ const confirmWithSignatureStatuses = (
           reject({ value: result.value, context: result.context });
         } else if (
           !(
-            result.value!.confirmations ||
-            (result.value!.confirmationStatus && confirmLevels.includes(result.value!.confirmationStatus))
+            result.value?.confirmations ||
+            (result.value?.confirmationStatus && confirmLevels.includes(result.value.confirmationStatus))
           )
         ) {
           logger.log('REST not confirmed', txid, result);
