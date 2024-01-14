@@ -116,44 +116,48 @@ const confirmWithSignatureStatuses = (
   externalSignal?: AbortSignal,
 ) => {
   return new Promise<RpcResponseAndContext<SignatureStatus>>(async (resolve, reject) => {
-    let intervalTimeout: NodeJS.Timer | null = null;
-    const retryTimer = timeoutConfig.getSignatureStatusesPoolIntervalMs || 5000;
-    const onAbort = () => {
-      if (intervalTimeout) {
-        clearInterval(intervalTimeout);
-      }
-
-      reject(ConfirmationReject.Aborted);
-    };
-    internalSignal.addEventListener('abort', onAbort);
-    externalSignal?.addEventListener('abort', onAbort);
-
-    intervalTimeout = setInterval(async () => {
-      try {
-        const result = await connection.getSignatureStatus(txid);
-        logger.log('REST result', result);
-
-        if (!result) return;
-
-        if (result.value?.err) {
-          logger.log('REST error for', txid, result);
-          reject({ value: result.value, context: result.context });
-        } else if (
-          !(
-            result.value?.confirmations ||
-            (result.value?.confirmationStatus && confirmLevels.includes(result.value.confirmationStatus))
-          )
-        ) {
-          logger.log('REST not confirmed', txid, result);
-        } else {
-          logger.log('REST confirmed', txid, result);
-          resolve({ value: result.value!, context: result.context });
+    try {
+      let intervalTimeout: NodeJS.Timer | null = null;
+      const retryTimer = timeoutConfig.getSignatureStatusesPoolIntervalMs || 5000;
+      const onAbort = () => {
+        if (intervalTimeout) {
+          clearInterval(intervalTimeout);
         }
-      } catch (e) {
-        logger.log('REST connection error: txid', txid, e);
-        reject(e);
-      }
-    }, retryTimer);
+
+        reject(ConfirmationReject.Aborted);
+      };
+      internalSignal.addEventListener('abort', onAbort);
+      externalSignal?.addEventListener('abort', onAbort);
+
+      intervalTimeout = setInterval(async () => {
+        try {
+          const result = await connection.getSignatureStatus(txid);
+          logger.log('REST result', result);
+
+          if (!result) return;
+
+          if (result.value?.err) {
+            logger.log('REST error for', txid, result);
+            reject({ value: result.value, context: result.context });
+          } else if (
+            !(
+              result.value?.confirmations ||
+              (result.value?.confirmationStatus && confirmLevels.includes(result.value.confirmationStatus))
+            )
+          ) {
+            logger.log('REST not confirmed', txid, result);
+          } else {
+            logger.log('REST confirmed', txid, result);
+            resolve({ value: result.value!, context: result.context });
+          }
+        } catch (e) {
+          logger.log('REST connection error: txid', txid, e);
+          reject(e);
+        }
+      }, retryTimer);
+    } catch (e) {
+      reject(e);
+    }
   });
 };
 
@@ -166,40 +170,44 @@ const confirmWithWebSockets = (
   externalSignal?: AbortSignal,
 ) => {
   return new Promise<RpcResponseAndContext<SignatureStatus>>(async (resolve, reject) => {
-    let subscriptionId: number | undefined;
-    const onAbort = () => {
+    try {
+      let subscriptionId: number | undefined;
+      const onAbort = () => {
+        if (subscriptionId) {
+          connection.removeSignatureListener(subscriptionId).catch((e) => {
+            logger.log('WS error in cleanup', e);
+          });
+        }
+        reject(ConfirmationReject.Aborted);
+      };
+      internalSignal.addEventListener('abort', onAbort);
+      externalSignal?.addEventListener('abort', onAbort);
+      try {
+        logger.log('on signature', connection);
+        subscriptionId = connection.onSignature(
+          txid,
+          (result, context) => {
+            subscriptionId = undefined;
+            if (result.err) {
+              reject({ value: result, context });
+            } else {
+              //@ts-ignore
+              resolve({ value: result, context });
+            }
+          },
+          confirmLevel,
+        );
+      } catch (e) {
+        reject(e);
+        logger.log('WS error in setup', txid, e);
+      }
       if (subscriptionId) {
         connection.removeSignatureListener(subscriptionId).catch((e) => {
           logger.log('WS error in cleanup', e);
         });
       }
-      reject(ConfirmationReject.Aborted);
-    };
-    internalSignal.addEventListener('abort', onAbort);
-    externalSignal?.addEventListener('abort', onAbort);
-    try {
-      logger.log('on signature', connection);
-      subscriptionId = connection.onSignature(
-        txid,
-        (result, context) => {
-          subscriptionId = undefined;
-          if (result.err) {
-            reject({ value: result, context });
-          } else {
-            //@ts-ignore
-            resolve({ value: result, context });
-          }
-        },
-        confirmLevel,
-      );
     } catch (e) {
       reject(e);
-      logger.log('WS error in setup', txid, e);
-    }
-    if (subscriptionId) {
-      connection.removeSignatureListener(subscriptionId).catch((e) => {
-        logger.log('WS error in cleanup', e);
-      });
     }
   });
 };
@@ -214,45 +222,57 @@ const timeoutCheck = (
   externalSignal?: AbortSignal,
 ) => {
   return new Promise<RpcResponseAndContext<SignatureStatus>>(async (resolve, reject) => {
-    let intervalTimer: NodeJS.Timeout | null = null;
-    let setTimeoutTimer: NodeJS.Timeout | null = null;
-    let timeoutBlockHeight = 0;
-    let timeout = 0;
-    if (timeoutConfig instanceof BlockHeightStrategyClass) {
-      timeoutBlockHeight = timeoutConfig.block.lastValidBlockHeight;
-      timeout = timeoutConfig.startBlockCheckAfterSecs;
-    } else {
-      timeout = timeoutConfig.timeout;
-    }
-    const onAbort = () => {
-      if (intervalTimer) {
-        clearInterval(intervalTimer);
+    try {
+      let intervalTimer: NodeJS.Timeout | null = null;
+      let setTimeoutTimer: NodeJS.Timeout | null = null;
+      let timeoutBlockHeight = 0;
+      let timeout = 0;
+      if (timeoutConfig instanceof BlockHeightStrategyClass) {
+        timeoutBlockHeight = timeoutConfig.block.lastValidBlockHeight;
+        timeout = timeoutConfig.startBlockCheckAfterSecs;
+      } else {
+        timeout = timeoutConfig.timeout;
       }
-      if (setTimeoutTimer) {
-        clearTimeout(setTimeoutTimer);
-      }
-      reject(ConfirmationReject.Aborted);
-    };
-    internalSignal.addEventListener('abort', onAbort);
-    externalSignal?.addEventListener('abort', onAbort);
-    const retrySleep = timeoutConfig.getSignatureStatusesPoolIntervalMs || 5000;
-    setTimeoutTimer = setTimeout(async () => {
-      if (timeoutBlockHeight !== 0) {
-        intervalTimer = setInterval(async () => {
-          const currentBlockHeight = await connection.getBlockHeight(confirmLevel);
-          if (typeof currentBlockHeight !== undefined && timeoutBlockHeight <= currentBlockHeight!) {
+      const onAbort = () => {
+        if (intervalTimer) {
+          clearInterval(intervalTimer);
+        }
+        if (setTimeoutTimer) {
+          clearTimeout(setTimeoutTimer);
+        }
+        reject(ConfirmationReject.Aborted);
+      };
+      internalSignal.addEventListener('abort', onAbort);
+      externalSignal?.addEventListener('abort', onAbort);
+      const retrySleep = timeoutConfig.getSignatureStatusesPoolIntervalMs || 5000;
+      setTimeoutTimer = setTimeout(async () => {
+        try {
+          if (timeoutBlockHeight !== 0) {
+            intervalTimer = setInterval(async () => {
+              try {
+                const currentBlockHeight = await connection.getBlockHeight(confirmLevel);
+                if (typeof currentBlockHeight !== undefined && timeoutBlockHeight <= currentBlockHeight!) {
+                  logger.log('Timed out for txid: ', txid);
+                  if (intervalTimer) {
+                    clearInterval(intervalTimer);
+                  }
+                  reject(ConfirmationReject.Timeout);
+                }
+              } catch (e) {
+                reject(e);
+              }
+            }, retrySleep);
+          } else {
             logger.log('Timed out for txid: ', txid);
-            if (intervalTimer) {
-              clearInterval(intervalTimer);
-            }
             reject(ConfirmationReject.Timeout);
           }
-        }, retrySleep);
-      } else {
-        logger.log('Timed out for txid: ', txid);
-        reject(ConfirmationReject.Timeout);
-      }
-    }, timeout);
+        } catch (e) {
+          reject(e);
+        }
+      }, timeout);
+    } catch (e) {
+      reject(e);
+    }
   });
 };
 
