@@ -22,6 +22,7 @@ import {
   TransactionInstructionWithSigners,
   WalletSigner,
 } from './globalTypes';
+import WebSocket from 'ws';
 
 enum ConfirmationReject {
   Timeout = 'Timeout',
@@ -184,19 +185,30 @@ const confirmWithWebSockets = (
       externalSignal?.addEventListener('abort', onAbort);
       try {
         logger.log('on signature', connection);
-        subscriptionId = connection.onSignature(
-          txid,
-          (result, context) => {
-            subscriptionId = undefined;
-            if (result.err) {
-              reject({ value: result, context });
-            } else {
-              //@ts-ignore
-              resolve({ value: result, context });
-            }
-          },
-          confirmLevel,
-        );
+        const websocket = new WebSocket(connection.rpcEndpoint.replace(/^http(s?):\/\//, 'ws$1://'));
+        websocket.on('error', function error(err) {
+          //@ts-ignore
+          if (err.code === 'ECONNREFUSED') {
+            reject(err.message);
+          }
+        });
+        websocket.once('open', async () => {
+          websocket.close();
+          await sleep(100);
+          subscriptionId = connection.onSignature(
+            txid,
+            (result, context) => {
+              subscriptionId = undefined;
+              if (result.err) {
+                reject({ value: result, context });
+              } else {
+                //@ts-ignore
+                resolve({ value: result, context });
+              }
+            },
+            confirmLevel,
+          );
+        });
       } catch (e) {
         reject(e);
         logger.log('WS error in setup', txid, e);
