@@ -55,14 +55,14 @@ export type awaitTransactionSignatureConfirmationProps = {
  * TimeStrategy: pure timeout strategy
  *
  *  timeout: optional, (secs) after how much secs not confirmed transaction will be considered timeout, default: 90
- *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues, default: 2000
+ *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues, default: 4000
  *
  *
  * BlockHeightStrategy: blockheight pool satrategy
  *
  *  startBlockCheckAfterSecs: optional, (secs) after that time we will start to pool current blockheight and check if transaction will reach blockchain, default: 90
  *  block: BlockhashWithExpiryBlockHeight
- *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues and blockheight, default: 2000
+ *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues and blockheight, default: 4000
  * @param config.logFlowInfo when true it will console log process of processing transactions
  */
 export const awaitTransactionSignatureConfirmation = async ({
@@ -118,7 +118,7 @@ const confirmWithSignatureStatuses = (
   return new Promise<RpcResponseAndContext<SignatureStatus>>(async (resolve, reject) => {
     try {
       let intervalTimeout: NodeJS.Timer | null = null;
-      const retryTimer = timeoutConfig.getSignatureStatusesPoolIntervalMs || 5000;
+      const retryTimer = timeoutConfig.getSignatureStatusesPoolIntervalMs || 4000;
       const onAbort = () => {
         if (intervalTimeout) {
           clearInterval(intervalTimeout);
@@ -244,7 +244,7 @@ const timeoutCheck = (
       };
       internalSignal.addEventListener('abort', onAbort);
       externalSignal?.addEventListener('abort', onAbort);
-      const retrySleep = timeoutConfig.getSignatureStatusesPoolIntervalMs || 5000;
+      const retrySleep = timeoutConfig.getSignatureStatusesPoolIntervalMs || 4000;
       setTimeoutTimer = setTimeout(async () => {
         try {
           if (timeoutBlockHeight !== 0) {
@@ -303,17 +303,17 @@ export type sendAndConfirmSignedTransactionProps = {
  * TimeStrategy: pure timeout strategy
  *
  *  timeout: optional, (secs) after how much secs not confirmed transaction will be considered timeout, default: 90
- *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues, default: 5000
+ *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues, default: 4000
  *
  *
  * BlockHeightStrategy: blockheight pool satrategy
  *
  *  startBlockCheckAfterSecs: optional, (secs) after that time we will start to pool current blockheight and check if transaction will reach blockchain, default: 90
  *  block: BlockhashWithExpiryBlockHeight
- *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues and blockheight, default: 2000
+ *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues and blockheight, default: 4000
  *
  * @param config.resendTxUntilConfirmed force resend transaction in the mean time of waiting for confirmation, default false
- * @param config.resendPoolTimeMs when resendTxUntilConfirmed is true it will resend transaction every value of ms until there is timeout, default 2000
+ * @param config.resendPoolTimeMs when resendTxUntilConfirmed is true it will resend transaction every value of ms until there is timeout, default: 2000
  * @param config.logFlowInfo when true it will console log process of processing transactions
  * @param config.skipPreflight
  */
@@ -442,7 +442,7 @@ export type sendSignAndConfirmTransactionsProps = {
  *
  *  startBlockCheckAfterSecs: optional, (secs) after that time we will start to pool current blockheight and check if transaction will reach blockchain, default: 90
  *  block: BlockhashWithExpiryBlockHeight
- *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues and blockheight, default: 2000
+ *  getSignatureStatusesPoolIntervalMs: optional, (ms) pool interval of getSignatureStatues and blockheight, default: 4000
  *
  *
  * @param callbacks sets of callbacks

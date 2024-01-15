@@ -23,7 +23,7 @@ export interface TimeoutStrategy {
 
 /**
  * @param timeout optional (secs) after how much secs not confirmed transaction will be considered timeout, default: 90
- * @param getSignatureStatusesPoolIntervalMs optional (ms) pool interval of getSignatureStatues, default: 2000
+ * @param getSignatureStatusesPoolIntervalMs optional (ms) pool interval of getSignatureStatues, default: 4000
  */
 export interface Time {
   timeout: number;
@@ -31,7 +31,7 @@ export interface Time {
 /**
  * @param startBlockCheckAfterSecs optional (secs) after that time we will start to pool current blockheight and check if transaction will reach blockchain, default: 90
  * @param block BlockhashWithExpiryBlockHeight
- * @param getSignatureStatusesPoolIntervalMs optional (ms) pool interval of getSignatureStatues and blockheight, default: 2000
+ * @param getSignatureStatusesPoolIntervalMs optional (ms) pool interval of getSignatureStatues and blockheight, default: 4000
  */
 export interface BlockHeight {
   startBlockCheckAfterSecs?: number;
@@ -42,7 +42,7 @@ export class TimeStrategyClass implements TimeStrategy {
   getSignatureStatusesPoolIntervalMs: number;
   constructor({
     timeout = 90,
-    getSignatureStatusesPoolIntervalMs = 5000,
+    getSignatureStatusesPoolIntervalMs = 4000,
   }: {
     timeout: number;
     getSignatureStatusesPoolIntervalMs?: number;
@@ -58,7 +58,7 @@ export class BlockHeightStrategyClass implements BlockHeightStrategy {
   constructor({
     startBlockCheckAfterSecs = 10,
     block,
-    getSignatureStatusesPoolIntervalMs = 5000,
+    getSignatureStatusesPoolIntervalMs = 4000,
   }: {
     block: BlockhashWithExpiryBlockHeight;
     getSignatureStatusesPoolIntervalMs?: number;
