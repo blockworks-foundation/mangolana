@@ -134,7 +134,6 @@ const confirmWithSignatureStatuses = (
         try {
           const result = await connection.getSignatureStatus(txid);
           logger.log('REST result', result);
-
           if (!result) return;
 
           if (result.value?.err) {
@@ -174,21 +173,30 @@ const confirmWithWebSockets = (
     try {
       let subscriptionId: number | undefined;
       const onAbort = () => {
-        if (subscriptionId) {
+        cleanup();
+        reject(ConfirmationReject.Aborted);
+      };
+      const cleanup = () => {
+        if (
+          subscriptionId &&
+          //@ts-ignore
+          Object.values(connection._subscriptionsByHash).find((x) => x.serverSubscriptionId === subscriptionId)
+        ) {
           connection.removeSignatureListener(subscriptionId).catch((e) => {
             logger.log('WS error in cleanup', e);
           });
         }
-        reject(ConfirmationReject.Aborted);
       };
       internalSignal.addEventListener('abort', onAbort);
       externalSignal?.addEventListener('abort', onAbort);
       try {
         logger.log('on signature', connection);
+        //In native websockets of web3 there is retry infinity so to prevent connecting to
+        //broken rpc we check if websockets are working
         const websocket = new WebSocket(connection.rpcEndpoint.replace(/^http(s?):\/\//, 'ws$1://'));
         websocket.on('error', function error(err) {
           //@ts-ignore
-          if (err.code === 'ECONNREFUSED') {
+          if (err?.code === 'ECONNREFUSED') {
             websocket.close();
             reject(err.message);
           }
@@ -201,8 +209,10 @@ const confirmWithWebSockets = (
             (result, context) => {
               subscriptionId = undefined;
               if (result.err) {
+                cleanup();
                 reject({ value: result, context });
               } else {
+                cleanup();
                 //@ts-ignore
                 resolve({ value: result, context });
               }
@@ -211,13 +221,9 @@ const confirmWithWebSockets = (
           );
         });
       } catch (e) {
-        reject(e);
         logger.log('WS error in setup', txid, e);
-      }
-      if (subscriptionId) {
-        connection.removeSignatureListener(subscriptionId).catch((e) => {
-          logger.log('WS error in cleanup', e);
-        });
+        cleanup();
+        reject(e);
       }
     } catch (e) {
       reject(e);
