@@ -189,6 +189,7 @@ const confirmWithWebSockets = (
         websocket.on('error', function error(err) {
           //@ts-ignore
           if (err.code === 'ECONNREFUSED') {
+            websocket.close();
             reject(err.message);
           }
         });
