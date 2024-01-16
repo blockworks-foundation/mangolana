@@ -194,9 +194,8 @@ const confirmWithWebSockets = (
         //broken rpc we check if websockets are working
         const websocket = new Websocket(connection.rpcEndpoint.replace(/^http(s?):\/\//, 'ws$1://'));
 
-        websocket.onerror = function error(err) {
+        websocket.onerror = function error() {
           websocket.close();
-          reject(err.message);
         };
         websocket.onopen = async () => {
           websocket.close();
