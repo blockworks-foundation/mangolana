@@ -22,7 +22,7 @@ import {
   TransactionInstructionWithSigners,
   WalletSigner,
 } from './globalTypes';
-import WebSocket from 'ws';
+import io from 'socket.io-client';
 
 enum ConfirmationReject {
   Timeout = 'Timeout',
@@ -193,9 +193,9 @@ const confirmWithWebSockets = (
         logger.log('on signature', connection);
         //In native websockets of web3 there is retry infinity so to prevent connecting to
         //broken rpc we check if websockets are working
-        const websocket = new WebSocket(connection.rpcEndpoint.replace(/^http(s?):\/\//, 'ws$1://'));
+        const websocket = io(connection.rpcEndpoint.replace(/^http(s?):\/\//, 'ws$1://'));
+
         websocket.on('error', function error(err) {
-          //@ts-ignore
           if (err?.code === 'ECONNREFUSED') {
             websocket.close();
             reject(err.message);

@@ -32,7 +32,8 @@
   "dependencies": {
     "@solana/web3.js": "^1.88.0",
     "bs58": "^5.0.0",
-    "node-fetch": "2.6.11"
+    "node-fetch": "2.6.11",
+    "socket.io-client": "^4.7.4"
   },
   "devDependencies": {
     "prettier": "^2.7.1",
