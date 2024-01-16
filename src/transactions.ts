@@ -3,7 +3,6 @@ import {
   Connection,
   Keypair,
   RpcResponseAndContext,
-  SignatureResult,
   SignatureStatus,
   SimulatedTransactionResponse,
   Transaction,
@@ -22,7 +21,7 @@ import {
   TransactionInstructionWithSigners,
   WalletSigner,
 } from './globalTypes';
-import io from 'socket.io-client';
+import Websocket from 'isomorphic-ws';
 
 enum ConfirmationReject {
   Timeout = 'Timeout',
@@ -193,15 +192,13 @@ const confirmWithWebSockets = (
         logger.log('on signature', connection);
         //In native websockets of web3 there is retry infinity so to prevent connecting to
         //broken rpc we check if websockets are working
-        const websocket = io(connection.rpcEndpoint.replace(/^http(s?):\/\//, 'ws$1://'));
+        const websocket = new Websocket(connection.rpcEndpoint.replace(/^http(s?):\/\//, 'ws$1://'));
 
-        websocket.on('error', function error(err) {
-          if (err?.code === 'ECONNREFUSED') {
-            websocket.close();
-            reject(err.message);
-          }
-        });
-        websocket.once('open', async () => {
+        websocket.onerror = function error(err) {
+          websocket.close();
+          reject(err.message);
+        };
+        websocket.onopen = async () => {
           websocket.close();
           await sleep(100);
           subscriptionId = connection.onSignature(
@@ -219,7 +216,7 @@ const confirmWithWebSockets = (
             },
             confirmLevel,
           );
-        });
+        };
       } catch (e) {
         logger.log('WS error in setup', txid, e);
         cleanup();
