@@ -98,6 +98,7 @@ export const awaitTransactionSignatureConfirmation = async ({
       confirmWithWebSockets(txid, connection, confirmLevel, logger, abortController.signal, abortSignal),
       timeoutCheck(txid, timeoutConfig, logger, connection, confirmLevel, abortController.signal, abortSignal),
     ]);
+    abortController.abort();
     return result;
   } catch (e) {
     abortController.abort();
@@ -117,13 +118,15 @@ const confirmWithSignatureStatuses = (
 ) => {
   return new Promise<RpcResponseAndContext<SignatureStatus>>(async (resolve, reject) => {
     try {
-      let intervalTimeout: NodeJS.Timer | null = null;
       const retryTimer = timeoutConfig.getSignatureStatusesPoolIntervalMs || 4000;
-      const onAbort = () => {
+      let intervalTimeout: NodeJS.Timer | null = null;
+      const cleanUp = () => {
         if (intervalTimeout) {
           clearInterval(intervalTimeout);
         }
-
+      };
+      const onAbort = () => {
+        cleanUp();
         reject(ConfirmationReject.Aborted);
       };
       internalSignal.addEventListener('abort', onAbort);
@@ -206,9 +209,11 @@ const confirmWithWebSockets = (
               subscriptionId = undefined;
               if (result.err) {
                 cleanup();
+                logger.log('WS reject', txid, result);
                 reject({ value: result, context });
               } else {
                 cleanup();
+                logger.log('WS resolve', txid, result);
                 //@ts-ignore
                 resolve({ value: result, context });
               }
