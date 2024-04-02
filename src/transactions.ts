@@ -690,10 +690,12 @@ export const sendSignAndConfirmTransactions = async ({
         });
       }
     }
-    if (config.autoRetry && config.maxRetries < config.retried) {
+
+    if (config.autoRetry && config.maxRetries >= config.retried) {
       const idx = (e as any)?.transactionInstructionIdx;
       if (typeof idx !== 'undefined') {
         config.retried++;
+        logger.log('Auto retry is, on retry number');
         const txInstructionForRetry = transactionInstructions.slice(idx, transactionInstructions.length);
         await sendSignAndConfirmTransactions({
           connection,
