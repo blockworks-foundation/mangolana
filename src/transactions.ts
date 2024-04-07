@@ -10,7 +10,7 @@ import {
   TransactionSignature,
 } from '@solana/web3.js';
 import bs58 = require('bs58');
-import { getUnixTs, Logger, MAXIMUM_NUMBER_OF_BLOCKS_FOR_TRANSACTION, sleep } from './tools';
+import { getUnixTs, Logger, sleep } from './tools';
 import {
   BlockHeightStrategy,
   BlockHeightStrategyClass,
@@ -311,6 +311,7 @@ export type sendAndConfirmSignedTransactionProps = {
     logFlowInfo?: boolean;
     skipPreflight?: boolean;
   };
+  backupConnections?: Connection[];
 };
 
 /**
@@ -344,7 +345,13 @@ export const sendAndConfirmSignedTransaction = async ({
   callbacks,
   timeoutStrategy,
   config,
+  backupConnections,
 }: sendAndConfirmSignedTransactionProps) => {
+  const connections = [connection];
+  const abortController = new AbortController();
+  if (backupConnections && backupConnections.length) {
+    connections.push(...backupConnections);
+  }
   const logger = new Logger({ ...config });
   const timeoutConfig = getTimeoutConfig(timeoutStrategy);
   let resendTimeout = 0;
@@ -359,9 +366,13 @@ export const sendAndConfirmSignedTransaction = async ({
   const rawTransaction = signedTransaction.serialize();
   let txid = bs58.encode(signedTransaction.signatures[0].signature!);
   const startTime = getUnixTs();
-  txid = await connection.sendRawTransaction(rawTransaction, {
-    skipPreflight: config?.skipPreflight === undefined ? true : config.skipPreflight,
-  });
+  txid = await Promise.any(
+    connections.map((c) => {
+      return c.sendRawTransaction(rawTransaction, {
+        skipPreflight: config?.skipPreflight === undefined ? true : config.skipPreflight,
+      });
+    }),
+  );
   if (callbacks?.postSendTxCallback) {
     try {
       callbacks.postSendTxCallback({ txid });
@@ -375,26 +386,44 @@ export const sendAndConfirmSignedTransaction = async ({
     (async () => {
       while (!done && getUnixTs() - startTime < resendTimeout!) {
         await sleep(config?.resendPoolTimeMs || 2000);
-        connection.sendRawTransaction(rawTransaction, {
-          skipPreflight: config?.skipPreflight === undefined ? true : config.skipPreflight,
+        connections.map((c) => {
+          return c.sendRawTransaction(rawTransaction, {
+            skipPreflight: config?.skipPreflight === undefined ? true : config.skipPreflight,
+          });
         });
       }
     })();
   }
 
   try {
-    await awaitTransactionSignatureConfirmation({
-      txid,
-      timeoutStrategy: timeoutStrategy,
-      confirmLevel,
-      connection,
-      config,
-    });
+    await Promise.any(
+      connections.map((c) =>
+        awaitTransactionSignatureConfirmation({
+          txid,
+          timeoutStrategy: timeoutStrategy,
+          confirmLevel,
+          connection: c,
+          config,
+          abortSignal: abortController.signal,
+        }),
+      ),
+    );
+    abortController.abort();
     if (callbacks?.afterTxConfirmation) {
       callbacks.afterTxConfirmation();
     }
   } catch (err: any) {
     logger.log(err);
+    abortController.abort();
+    if (err instanceof AggregateError) {
+      for (const individualError of err.errors) {
+        logger.log(individualError);
+        if (individualError === 'Timeout') {
+          throw { txid };
+        }
+        throw { message: 'Transaction failed', txid };
+      }
+    }
     if (err === 'Timeout') {
       throw { txid };
     }
@@ -453,6 +482,7 @@ export type sendSignAndConfirmTransactionsProps = {
     retried?: number;
     logFlowInfo?: boolean;
   };
+  backupConnections?: Connection[];
 };
 /**
  * sign and send array of transactions in desired batches with different styles of send for each array
@@ -492,6 +522,7 @@ export const sendSignAndConfirmTransactions = async ({
     retried: 0,
     logFlowInfo: false,
   },
+  backupConnections,
 }: sendSignAndConfirmTransactionsProps) => {
   const logger = new Logger({ ...config });
   let block = timeoutStrategy?.block;
@@ -589,6 +620,7 @@ export const sendSignAndConfirmTransactions = async ({
                     afterTxConfirmation: callbacks?.afterEveryTxConfirmation,
                   },
                   config,
+                  backupConnections,
                 });
                 resolve(resp);
               } catch (e) {
@@ -623,6 +655,7 @@ export const sendSignAndConfirmTransactions = async ({
                 afterTxConfirmation: callbacks?.afterEveryTxConfirmation,
               },
               config,
+              backupConnections,
             });
           } catch (e) {
             logger.log(e);
@@ -658,6 +691,7 @@ export const sendSignAndConfirmTransactions = async ({
           onError: callbacks?.onError,
         },
         config,
+        backupConnections,
       });
     }
     if (callbacks?.afterAllTxConfirmed) {
@@ -704,6 +738,7 @@ export const sendSignAndConfirmTransactions = async ({
           transactionInstructions: txInstructionForRetry,
           callbacks,
           config,
+          backupConnections,
         });
       } else {
         throw e;
