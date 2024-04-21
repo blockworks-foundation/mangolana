@@ -173,7 +173,7 @@ const confirmWithWebSockets = (
   return new Promise<RpcResponseAndContext<SignatureStatus>>(async (resolve, reject) => {
     try {
       let subscriptionId: number | undefined;
-      let tempConnection = new Connection(connection.rpcEndpoint, connection.commitment);
+      const tempConnection = new Connection(connection.rpcEndpoint, connection.commitment);
       let websocket: Websocket | null = null;
       const onAbort = () => {
         cleanup();
