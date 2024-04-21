@@ -119,14 +119,13 @@ const confirmWithSignatureStatuses = (
   return new Promise<RpcResponseAndContext<SignatureStatus>>(async (resolve, reject) => {
     try {
       const retryTimer = timeoutConfig.getSignatureStatusesPoolIntervalMs || 4000;
-      let intervalTimeout: NodeJS.Timer | null = null;
-      const cleanUp = () => {
+      let intervalTimeout: NodeJS.Timeout | null = null;
+      const onAbort = () => {
         if (intervalTimeout) {
           clearInterval(intervalTimeout);
         }
-      };
-      const onAbort = () => {
-        cleanUp();
+        internalSignal.removeEventListener('abort', onAbort);
+        externalSignal?.removeEventListener('abort', onAbort);
         reject(ConfirmationReject.Aborted);
       };
       internalSignal.addEventListener('abort', onAbort);
@@ -174,39 +173,46 @@ const confirmWithWebSockets = (
   return new Promise<RpcResponseAndContext<SignatureStatus>>(async (resolve, reject) => {
     try {
       let subscriptionId: number | undefined;
+      const tempConnection = new Connection(connection.rpcEndpoint, connection.commitment);
+      let websocket: Websocket | null = null;
       const onAbort = () => {
         cleanup();
         reject(ConfirmationReject.Aborted);
       };
-      const cleanup = () => {
-        if (
-          subscriptionId &&
-          //@ts-ignore
-          Object.values(connection._subscriptionsByHash).find((x) => x.serverSubscriptionId === subscriptionId)
-        ) {
-          connection.removeSignatureListener(subscriptionId).catch((e) => {
+      const cleanup = async () => {
+        //@ts-ignore
+        if (subscriptionId && tempConnection._subscriptionDisposeFunctionsByClientSubscriptionId[subscriptionId]) {
+          try {
+            await tempConnection.removeSignatureListener(subscriptionId);
+          } catch (e) {
             logger.log('WS error in cleanup', e);
-          });
+          }
         }
+        if (websocket && websocket.removeAllListeners) {
+          websocket.removeAllListeners();
+          websocket = null;
+        }
+        subscriptionId = undefined;
+        internalSignal.removeEventListener('abort', onAbort);
+        externalSignal?.removeEventListener('abort', onAbort);
       };
       internalSignal.addEventListener('abort', onAbort);
       externalSignal?.addEventListener('abort', onAbort);
       try {
-        logger.log('on signature', connection);
+        logger.log('on signature', txid);
         //In native websockets of web3 there is retry infinity so to prevent connecting to
         //broken rpc we check if websockets are working
-        const websocket = new Websocket(connection.rpcEndpoint.replace(/^http(s?):\/\//, 'ws$1://'));
+        websocket = new Websocket(tempConnection.rpcEndpoint.replace(/^http(s?):\/\//, 'ws$1://'));
 
         websocket.onerror = function error() {
-          websocket.close();
+          websocket?.close();
         };
         websocket.onopen = async () => {
-          websocket.close();
+          websocket?.close();
           await sleep(100);
-          subscriptionId = connection.onSignature(
+          subscriptionId = tempConnection.onSignature(
             txid,
             (result, context) => {
-              subscriptionId = undefined;
               if (result.err) {
                 cleanup();
                 logger.log('WS reject', txid, result);
@@ -260,6 +266,8 @@ const timeoutCheck = (
         if (setTimeoutTimer) {
           clearTimeout(setTimeoutTimer);
         }
+        internalSignal.removeEventListener('abort', onAbort);
+        externalSignal?.removeEventListener('abort', onAbort);
         reject(ConfirmationReject.Aborted);
       };
       internalSignal.addEventListener('abort', onAbort);
@@ -273,9 +281,6 @@ const timeoutCheck = (
                 const currentBlockHeight = await connection.getBlockHeight(confirmLevel);
                 if (typeof currentBlockHeight !== undefined && timeoutBlockHeight <= currentBlockHeight!) {
                   logger.log('Timed out for txid: ', txid);
-                  if (intervalTimer) {
-                    clearInterval(intervalTimer);
-                  }
                   reject(ConfirmationReject.Timeout);
                 }
               } catch (e) {
@@ -363,6 +368,7 @@ export const sendAndConfirmSignedTransaction = async ({
   if (config?.resendTxUntilConfirmed) {
     config.resendPoolTimeMs ||= 2000;
   }
+
   const rawTransaction = signedTransaction.serialize();
   let txid = bs58.encode(signedTransaction.signatures[0].signature!);
   const startTime = getUnixTs();
