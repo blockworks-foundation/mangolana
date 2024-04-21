@@ -213,7 +213,6 @@ const confirmWithWebSockets = (
           subscriptionId = tempConnection.onSignature(
             txid,
             (result, context) => {
-              subscriptionId = undefined;
               if (result.err) {
                 cleanup();
                 logger.log('WS reject', txid, result);
@@ -282,9 +281,6 @@ const timeoutCheck = (
                 const currentBlockHeight = await connection.getBlockHeight(confirmLevel);
                 if (typeof currentBlockHeight !== undefined && timeoutBlockHeight <= currentBlockHeight!) {
                   logger.log('Timed out for txid: ', txid);
-                  if (intervalTimer) {
-                    clearInterval(intervalTimer);
-                  }
                   reject(ConfirmationReject.Timeout);
                 }
               } catch (e) {
@@ -372,6 +368,7 @@ export const sendAndConfirmSignedTransaction = async ({
   if (config?.resendTxUntilConfirmed) {
     config.resendPoolTimeMs ||= 2000;
   }
+
   const rawTransaction = signedTransaction.serialize();
   let txid = bs58.encode(signedTransaction.signatures[0].signature!);
   const startTime = getUnixTs();
