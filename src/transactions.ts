@@ -698,6 +698,7 @@ export const sendSignAndConfirmTransactions = async ({
           afterBatchSign: callbacks?.afterBatchSign,
           afterAllTxConfirmed: callbacks?.afterAllTxConfirmed,
           afterEveryTxConfirmation: callbacks?.afterEveryTxConfirmation,
+          afterEveryTxSend: callbacks?.afterEveryTxSend,
           onError: callbacks?.onError,
         },
         config,
