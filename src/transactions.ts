@@ -480,6 +480,7 @@ export type sendSignAndConfirmTransactionsProps = {
       notProcessedTransactions: TransactionInstructionWithType[],
       originalProps: sendSignAndConfirmTransactionsProps,
     ) => void;
+    afterEveryTxSend?: ({ txid }: { txid: string }) => void;
   };
   config?: {
     maxTxesInBatch: number;
@@ -507,6 +508,7 @@ export type sendSignAndConfirmTransactionsProps = {
  * @param callbacks.afterAllTxConfirmed callback will run after all transaction batches are confirmed
  * @param callbacks.afterEveryTxConfirmation callback will run on every single transaction confirmation
  * @param callbacks.onError callback will run on error
+ * @param callbacks.afterEveryTxSend callback will run after every sended tx has tx signature as param
  *
  * @param config.maxTxesInBatch max transactions in one batch of transactions, there is limitation on how much wallet can sign in one go depending on used wallet. default 40
  * @param config.autoRetry auto retry on any error approve and send of transaction after error
@@ -624,6 +626,7 @@ export const sendSignAndConfirmTransactions = async ({
                   },
                   callbacks: {
                     afterTxConfirmation: callbacks?.afterEveryTxConfirmation,
+                    postSendTxCallback: callbacks?.afterEveryTxSend,
                   },
                   config,
                   backupConnections,
@@ -659,6 +662,7 @@ export const sendSignAndConfirmTransactions = async ({
               },
               callbacks: {
                 afterTxConfirmation: callbacks?.afterEveryTxConfirmation,
+                postSendTxCallback: callbacks?.afterEveryTxSend,
               },
               config,
               backupConnections,
