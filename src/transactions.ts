@@ -614,7 +614,7 @@ export const sendSignAndConfirmTransactions = async ({
         recentBlockhash: block.blockhash,
         addressLookupTableAccounts: [...alts],
       });
-      let vtx = new VersionedTransaction(message);
+      const vtx = new VersionedTransaction(message);
       if (signers?.length) {
         vtx.sign([...signers]);
       }
