@@ -1,13 +1,25 @@
-import { BlockhashWithExpiryBlockHeight, Keypair, TransactionInstruction } from '@solana/web3.js';
+import {
+  AddressLookupTableAccount,
+  BlockhashWithExpiryBlockHeight,
+  Keypair,
+  PublicKey,
+  TransactionInstruction,
+} from '@solana/web3.js';
 
 export type WalletSigner = Pick<any, 'publicKey' | 'signTransaction' | 'signAllTransactions'>;
 
 export class TransactionInstructionWithSigners {
   transactionInstruction: TransactionInstruction;
-  signers?: Keypair[];
-  constructor(transactionInstruction: TransactionInstruction, signers: Keypair[] = []) {
+  signers?: Keypair[] = [];
+  alts?: AddressLookupTableAccount[] = [];
+  constructor(
+    transactionInstruction: TransactionInstruction,
+    signers: Keypair[] = [],
+    alts: AddressLookupTableAccount[] = [],
+  ) {
     this.transactionInstruction = transactionInstruction;
     this.signers = signers;
+    this.alts = alts;
   }
 }
 
@@ -86,3 +98,12 @@ export const getTimeoutConfig = (timeoutStrategy: BlockHeightStrategy | TimeStra
     : new BlockHeightStrategyClass({ ...timeoutStrategy });
   return timeoutConfig;
 };
+
+export type SignaturePubkeyPair = {
+  signature: Buffer | null;
+  publicKey: PublicKey;
+};
+
+export function isSignaturePubKeyPair(sigPubkey: any): sigPubkey is SignaturePubkeyPair {
+  return sigPubkey?.signature !== undefined;
+}

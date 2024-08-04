@@ -30,11 +30,11 @@
   },
   "homepage": "https://github.com/blockworks-foundation/mangolana#readme",
   "dependencies": {
-    "@solana/web3.js": "^1.91.6",
+    "@solana/web3.js": "^1.95.2",
     "bs58": "^5.0.0",
     "isomorphic-ws": "^5.0.0",
     "node-fetch": "3.3.2",
-    "ws": "^8.16.0"
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/node": "20.12.7",

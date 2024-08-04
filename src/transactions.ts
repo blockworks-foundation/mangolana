@@ -1,13 +1,17 @@
 import {
+  AddressLookupTableAccount,
   Commitment,
   Connection,
   Keypair,
+  MessageV0,
   RpcResponseAndContext,
   SignatureStatus,
   SimulatedTransactionResponse,
   Transaction,
   TransactionConfirmationStatus,
+  TransactionInstruction,
   TransactionSignature,
+  VersionedTransaction,
 } from '@solana/web3.js';
 import bs58 = require('bs58');
 import { getUnixTs, Logger, sleep } from './tools';
@@ -20,6 +24,8 @@ import {
   TimeStrategyClass,
   TransactionInstructionWithSigners,
   WalletSigner,
+  SignaturePubkeyPair,
+  isSignaturePubKeyPair,
 } from './globalTypes';
 import Websocket from 'isomorphic-ws';
 
@@ -302,7 +308,7 @@ const timeoutCheck = (
 };
 
 export type sendAndConfirmSignedTransactionProps = {
-  signedTransaction: Transaction;
+  signedTransaction: Transaction | VersionedTransaction;
   connection: Connection;
   confirmLevel?: TransactionConfirmationStatus;
   timeoutStrategy: TimeStrategy | BlockHeightStrategy;
@@ -315,6 +321,7 @@ export type sendAndConfirmSignedTransactionProps = {
     resendPoolTimeMs?: number;
     logFlowInfo?: boolean;
     skipPreflight?: boolean;
+    useVersionedTransactions?: boolean;
   };
   backupConnections?: Connection[];
 };
@@ -370,7 +377,12 @@ export const sendAndConfirmSignedTransaction = async ({
   }
 
   const rawTransaction = signedTransaction.serialize();
-  let txid = bs58.encode(signedTransaction.signatures[0].signature!);
+  let txid = bs58.encode(
+    isSignaturePubKeyPair(signedTransaction.signatures[0])
+      ? signedTransaction.signatures[0].signature!
+      : signedTransaction.signatures[0],
+  );
+
   const startTime = getUnixTs();
   txid = await Promise.any(
     connections.map((c) => {
@@ -488,6 +500,7 @@ export type sendSignAndConfirmTransactionsProps = {
     maxRetries?: number;
     retried?: number;
     logFlowInfo?: boolean;
+    useVersionedTransactions?: boolean;
   };
   backupConnections?: Connection[];
 };
@@ -515,6 +528,7 @@ export type sendSignAndConfirmTransactionsProps = {
  * @param config.maxRetries if auto retry is true, it will try this amount of times before actual error, default 5
  * @param config.retired argument passed by recursive function best not to change it, default 0
  * @param config.logFlowInfo when true it will console log process of processing transactions
+ * @param config.useVersionedTransactions will send all txes as versioned transactions
  */
 export const sendSignAndConfirmTransactions = async ({
   connection,
@@ -529,6 +543,7 @@ export const sendSignAndConfirmTransactions = async ({
     maxRetries: 5,
     retried: 0,
     logFlowInfo: false,
+    useVersionedTransactions: false,
   },
   backupConnections,
 }: sendSignAndConfirmTransactionsProps) => {
@@ -546,29 +561,18 @@ export const sendSignAndConfirmTransactions = async ({
   }
   //block will be used for timeout calculation
   //max usable transactions per one sign is 40
+  const useVersionedTransactions = config.useVersionedTransactions;
   const maxTransactionsInBath = config.maxTxesInBatch;
   const currentTransactions = transactionInstructions.slice(0, maxTransactionsInBath);
-  const unsignedTxns: Transaction[] = [];
+  const unsignedTxns: (Transaction | VersionedTransaction)[] = [];
   //this object will determine how we run transactions e.g [ParallelTx, SequenceTx, ParallelTx]
   const transactionCallOrchestrator: TransactionsPlayingIndexes[] = [];
   for (let i = 0; i < currentTransactions.length; i++) {
     const transactionInstruction = currentTransactions[i];
-    const signers: Keypair[] = [];
     if (transactionInstruction.instructionsSet.length === 0) {
       continue;
     }
 
-    const transaction = new Transaction({ feePayer: wallet.publicKey });
-    transactionInstruction.instructionsSet.forEach((instruction) => {
-      transaction.add(instruction.transactionInstruction);
-      if (instruction.signers?.length) {
-        signers.push(...instruction.signers);
-      }
-    });
-    transaction.recentBlockhash = block.blockhash;
-    if (signers?.length) {
-      transaction.partialSign(...signers);
-    }
     //we take last index of unsignedTransactions to have right indexes because
     //if transactions was empty
     //then unsigned transactions could not mach TransactionInstructions param indexes
@@ -588,8 +592,51 @@ export const sendSignAndConfirmTransactions = async ({
         sequenceType: transactionInstruction.sequenceType,
       });
     }
-    unsignedTxns.push(transaction);
+
+    if (useVersionedTransactions) {
+      const ixes: TransactionInstruction[] = [];
+      const signers: Keypair[] = [];
+      const alts: AddressLookupTableAccount[] = [];
+
+      transactionInstruction.instructionsSet.forEach((instruction) => {
+        ixes.push(instruction.transactionInstruction);
+        if (instruction.signers?.length) {
+          signers.push(...instruction.signers);
+        }
+        if (instruction.alts?.length) {
+          alts.push(...instruction.alts);
+        }
+      });
+
+      const message = MessageV0.compile({
+        payerKey: wallet.publicKey,
+        instructions: [...ixes],
+        recentBlockhash: block.blockhash,
+        addressLookupTableAccounts: [...alts],
+      });
+      let vtx = new VersionedTransaction(message);
+      if (signers?.length) {
+        vtx.sign([...signers]);
+      }
+
+      unsignedTxns.push(vtx);
+    } else {
+      const signers: Keypair[] = [];
+      const transaction = new Transaction({ feePayer: wallet.publicKey });
+      transactionInstruction.instructionsSet.forEach((instruction) => {
+        transaction.add(instruction.transactionInstruction);
+        if (instruction.signers?.length) {
+          signers.push(...instruction.signers);
+        }
+      });
+      transaction.recentBlockhash = block.blockhash;
+      if (signers?.length) {
+        transaction.partialSign(...signers);
+      }
+      unsignedTxns.push(transaction);
+    }
   }
+
   logger.log(transactionCallOrchestrator);
   const signedTxns = await wallet.signAllTransactions(unsignedTxns);
   if (callbacks?.afterFirstBatchSign) {
@@ -763,33 +810,46 @@ export const sendSignAndConfirmTransactions = async ({
 /** Copy of Connection.simulateTransaction that takes a commitment parameter. */
 export async function simulateTransaction(
   connection: Connection,
-  transaction: Transaction,
+  transaction: Transaction | VersionedTransaction,
   commitment: Commitment,
   logInfo?: boolean,
 ): Promise<RpcResponseAndContext<SimulatedTransactionResponse>> {
   const logger = new Logger({ logFlowInfo: !!logInfo });
   const latestBlockhash = await connection.getLatestBlockhash();
-  transaction.lastValidBlockHeight = latestBlockhash.lastValidBlockHeight;
-  transaction.recentBlockhash = latestBlockhash.blockhash;
+  if (transaction instanceof Transaction) {
+    transaction.lastValidBlockHeight = latestBlockhash.lastValidBlockHeight;
+    transaction.recentBlockhash = latestBlockhash.blockhash;
 
-  logger.log('simulating transaction', transaction);
+    logger.log('simulating transaction', transaction);
 
-  const signData = transaction.serializeMessage();
-  // @ts-ignore
-  const wireTransaction = transaction._serialize(signData);
-  const encodedTransaction = wireTransaction.toString('base64');
+    const signData = transaction.serializeMessage();
 
-  logger.log('encoding');
-  const config: any = { encoding: 'base64', commitment };
-  const args = [encodedTransaction, config];
-  logger.log('simulating data', args);
+    // @ts-ignore
+    const wireTransaction = transaction._serialize(signData);
+    const encodedTransaction = wireTransaction.toString('base64');
 
-  // @ts-ignore
-  const res = await connection._rpcRequest('simulateTransaction', args);
+    logger.log('encoding');
+    const config: any = { encoding: 'base64', commitment };
+    const args = [encodedTransaction, config];
+    logger.log('simulating data', args);
 
-  logger.log('res simulating transaction', res);
-  if (res.error) {
-    throw new Error('failed to simulate transaction: ' + res.error.message);
+    // @ts-ignore
+    const res = await connection._rpcRequest('simulateTransaction', args);
+
+    logger.log('res simulating transaction', res);
+    if (res.error) {
+      throw new Error('failed to simulate transaction: ' + res.error.message);
+    }
+    return res.result;
+  } else {
+    logger.log('simulating transaction', transaction);
+
+    const res = await connection.simulateTransaction(transaction);
+
+    logger.log('res simulating transaction', res);
+    if (res.value.err) {
+      throw new Error('failed to simulate transaction: ' + res.value.err.toString());
+    }
+    return res;
   }
-  return res.result;
 }
