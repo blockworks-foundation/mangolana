@@ -34,7 +34,8 @@
     "bs58": "^5.0.0",
     "isomorphic-ws": "^5.0.0",
     "node-fetch": "3.3.2",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "@solana/promises": "2.0.0-canary-20240812091942"
   },
   "devDependencies": {
     "@types/node": "20.12.7",

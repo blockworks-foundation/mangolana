@@ -49,6 +49,11 @@
   dependencies:
     buffer "~6.0.3"
 
+"@solana/promises@2.0.0-canary-20240812091942":
+  version "2.0.0-canary-20240812091942"
+  resolved "https://registry.yarnpkg.com/@solana/promises/-/promises-2.0.0-canary-20240812091942.tgz#e0f1d0c200170a791f120e320b10c446d30644c9"
+  integrity sha512-HLYVZxrXnMatnBBtHCK1qY7T2AEnhI2AL4PY10iZZ98JIO9dE6igRwFlBulC3ts8qBBkivDf0rF6RahvkrHV0A==
+
 "@solana/web3.js@^1.95.2":
   version "1.95.2"
   resolved "https://registry.yarnpkg.com/@solana/web3.js/-/web3.js-1.95.2.tgz#6f8a0362fa75886a21550dbec49aad54481463a6"

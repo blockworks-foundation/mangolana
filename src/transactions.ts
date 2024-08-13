@@ -28,6 +28,7 @@ import {
   isSignaturePubKeyPair,
 } from './globalTypes';
 import Websocket from 'isomorphic-ws';
+import { safeRace } from '@solana/promises';
 
 enum ConfirmationReject {
   Timeout = 'Timeout',
@@ -91,7 +92,7 @@ export const awaitTransactionSignatureConfirmation = async ({
     confirmLevels.push('processed');
   }
   try {
-    const result: RpcResponseAndContext<SignatureStatus> = await Promise.race([
+    const result: RpcResponseAndContext<SignatureStatus> = await safeRace([
       confirmWithSignatureStatuses(
         txid,
         connection,
