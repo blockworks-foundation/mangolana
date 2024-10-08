@@ -140,8 +140,16 @@ const confirmWithSignatureStatuses = (
 
       intervalTimeout = setInterval(async () => {
         try {
-          const result = await connection.getSignatureStatus(txid);
+          const statuses = await connection.getSignatureStatuses([txid]);
+          const result =
+            statuses && statuses.value.length && statuses.value[0] !== null
+              ? {
+                  context: statuses.context,
+                  value: statuses.value[0],
+                }
+              : null;
           logger.log('REST result', result);
+
           if (!result) return;
 
           if (result.value?.err) {
